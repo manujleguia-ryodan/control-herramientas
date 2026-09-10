@@ -11,6 +11,7 @@ import {
   workers,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { hashPassword } from "./passwords";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -109,11 +110,27 @@ export async function createLocation(input: { code: string; name: string; zone?:
   await db.insert(warehouseLocations).values(input);
   return { success: true } as const;
 }
-export async function createStorekeeper(input: { code: string; fullName: string; employeeId?: string; phone?: string }) {
+export async function createStorekeeper(input: { code: string; fullName: string; employeeId?: string; phone?: string; password: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(storekeepers).values(input);
+  const existing = await getStorekeeperCount();
+  const { password, ...profile } = input;
+  await db.insert(storekeepers).values({ ...profile, passwordHash: hashPassword(password), role: existing === 0 ? "admin" : "operator" });
   return { success: true } as const;
+}
+
+export async function getStorekeeperByCode(code: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(storekeepers).where(eq(storekeepers.code, code)).limit(1);
+  return result[0];
+}
+
+export async function getStorekeeperCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: sql<number>`count(*)` }).from(storekeepers);
+  return Number(result[0]?.count ?? 0);
 }
 export async function createWorker(input: { code: string; fullName: string; area?: string; company?: string; unitId?: number }) {
   const db = await getDb();
@@ -146,7 +163,7 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
   return { success: true } as const;
 }
 
-export async function importCatalog(input: { units: Array<{ code: string; name: string; company?: string; site?: string }>; locations: Array<{ code: string; name: string; zone?: string; description?: string; unitCode?: string; photoUrl?: string }>; storekeepers: Array<{ code: string; fullName: string; employeeId?: string; phone?: string }>; workers: Array<{ code: string; fullName: string; area?: string; company?: string; unitCode?: string }>; tools: Array<{ code: string; name: string; category?: string; brand?: string; model?: string; serialNumber?: string; quantity?: number; unitCode?: string; locationCode?: string; imageUrl?: string; notes?: string }> }) {
+export async function importCatalog(input: { units: Array<{ code: string; name: string; company?: string; site?: string }>; locations: Array<{ code: string; name: string; zone?: string; description?: string; unitCode?: string; photoUrl?: string }>; storekeepers: Array<{ code: string; fullName: string; employeeId?: string; phone?: string; password?: string }>; workers: Array<{ code: string; fullName: string; area?: string; company?: string; unitCode?: string }>; tools: Array<{ code: string; name: string; category?: string; brand?: string; model?: string; serialNumber?: string; quantity?: number; unitCode?: string; locationCode?: string; imageUrl?: string; notes?: string }> }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
@@ -154,7 +171,7 @@ export async function importCatalog(input: { units: Array<{ code: string; name: 
     const units = await tx.select().from(miningUnits);
     const unitIdByCode = new Map(units.map((unit) => [unit.code, unit.id]));
     for (const row of input.locations) if (row.code && row.name) await tx.insert(warehouseLocations).values({ code: row.code.trim(), name: row.name.trim(), zone: row.zone, description: row.description, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, photoUrl: row.photoUrl }).onDuplicateKeyUpdate({ set: { name: row.name.trim(), zone: row.zone, description: row.description, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, photoUrl: row.photoUrl } });
-    for (const row of input.storekeepers) if (row.code && row.fullName) await tx.insert(storekeepers).values({ code: row.code.trim(), fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone }).onDuplicateKeyUpdate({ set: { fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone } });
+    for (const row of input.storekeepers) if (row.code && row.fullName && row.password) await tx.insert(storekeepers).values({ code: row.code.trim(), fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone, passwordHash: hashPassword(row.password) }).onDuplicateKeyUpdate({ set: { fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone, passwordHash: hashPassword(row.password) } });
     for (const row of input.workers) if (row.code && row.fullName) await tx.insert(workers).values({ code: row.code.trim(), fullName: row.fullName.trim(), area: row.area, company: row.company, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined }).onDuplicateKeyUpdate({ set: { fullName: row.fullName.trim(), area: row.area, company: row.company, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined } });
     const locations = await tx.select().from(warehouseLocations);
     const locationIdByCode = new Map(locations.map((location) => [location.code, location.id]));

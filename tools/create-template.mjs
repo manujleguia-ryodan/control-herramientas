@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 const sheets = {
   unidades: ['codigo', 'nombre', 'empresa', 'sitio'],
   ubicaciones: ['codigo', 'nombre', 'zona', 'descripcion', 'codigo_unidad', 'foto_url'],
-  almaceneros: ['codigo', 'nombre_completo', 'documento', 'telefono'],
+  almaceneros: ['codigo', 'nombre_completo', 'documento', 'telefono', 'contrasena'],
   trabajadores: ['codigo', 'nombre_completo', 'area', 'empresa', 'codigo_unidad'],
   herramientas: ['codigo', 'nombre', 'categoria', 'marca', 'modelo', 'numero_serie', 'cantidad', 'codigo_unidad', 'codigo_ubicacion', 'imagen_url', 'observaciones'],
 };
