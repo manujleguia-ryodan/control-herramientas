@@ -50,6 +50,9 @@ type Tool = {
   rotations: number;
   lastMovement: string;
   serial?: string;
+  daysOut?: number;
+  holder?: string;
+  holderCode?: string;
 };
 
 type Worker = {
@@ -82,10 +85,10 @@ const toolImages = {
 };
 
 const initialTools: Tool[] = [
-  { id: "t1", code: "TAL-00245", name: "Taladro percutor 13 mm", category: "Eléctrica", brand: "Bosch GSB", location: "Estante 03 · A-12", image: toolImages.drill, status: "Prestada", stock: 4, available: 3, rotations: 86, lastMovement: "Hoy, 08:42", serial: "BSH-13-4492" },
+  { id: "t1", code: "TAL-00245", name: "Taladro percutor 13 mm", category: "Eléctrica", brand: "Bosch GSB", location: "Estante 03 · A-12", image: toolImages.drill, status: "Prestada", stock: 4, available: 3, rotations: 86, lastMovement: "Hoy, 08:42", serial: "BSH-13-4492", daysOut: 9, holder: "Carlos Mendoza", holderCode: "TRB-1048" },
   { id: "t2", code: "MUL-00032", name: "Multímetro digital", category: "Medición", brand: "Fluke 87V", location: "Gabinete 02 · B-04", image: toolImages.meter, status: "Disponible", stock: 6, available: 6, rotations: 64, lastMovement: "Ayer, 16:18", serial: "FLK-87-2108" },
-  { id: "t3", code: "LLV-00118", name: "Llave francesa 12”", category: "Manual", brand: "Bahco", location: "Panel 01 · C-08", image: toolImages.keys, status: "Prestada", stock: 12, available: 10, rotations: 48, lastMovement: "Hoy, 07:55", serial: "BHC-12-8841" },
-  { id: "t4", code: "KIT-00027", name: "Kit de herramientas", category: "Sets", brand: "Dewalt 223 pzs", location: "Estante 01 · A-03", image: toolImages.kit, status: "Mantenimiento", stock: 3, available: 2, rotations: 37, lastMovement: "08 sep, 12:20", serial: "DWT-223-0091" },
+  { id: "t3", code: "LLV-00118", name: "Llave francesa 12”", category: "Manual", brand: "Bahco", location: "Panel 01 · C-08", image: toolImages.keys, status: "Prestada", stock: 12, available: 10, rotations: 48, lastMovement: "Hoy, 07:55", serial: "BHC-12-8841", daysOut: 14, holder: "Luis Paredes", holderCode: "TRB-1104" },
+  { id: "t4", code: "KIT-00027", name: "Kit de herramientas", category: "Sets", brand: "Dewalt 223 pzs", location: "Estante 01 · A-03", image: toolImages.kit, status: "Mantenimiento", stock: 3, available: 2, rotations: 37, lastMovement: "08 sep, 12:20", serial: "DWT-223-0091", daysOut: 21, holder: "Jorge Salinas", holderCode: "TRB-1082" },
   { id: "t5", code: "MAR-00086", name: "Martillo de bola 2 lb", category: "Manual", brand: "Stanley", location: "Panel 02 · C-14", image: toolImages.keys, status: "Disponible", stock: 8, available: 8, rotations: 29, lastMovement: "07 sep, 17:02", serial: "STN-2LB-1024" },
   { id: "t6", code: "ESM-00041", name: "Esmeril angular 4 ½”", category: "Eléctrica", brand: "Makita", location: "Estante 04 · A-19", image: toolImages.drill, status: "Disponible", stock: 3, available: 3, rotations: 22, lastMovement: "05 sep, 09:34", serial: "MKT-115-7740" },
 ];
@@ -166,6 +169,11 @@ export default function Home() {
   const openMovement = (type: MovementType, toolId = selectedTool) => {
     setMovementType(type);
     setSelectedTool(toolId);
+    const tool = tools.find((item) => item.id === toolId);
+    if (type === "Recepción" && tool?.holderCode) {
+      const holder = workers.find((worker) => worker.code === tool.holderCode);
+      if (holder) setSelectedWorker(holder.id);
+    }
     setModal("movement");
   };
 
@@ -260,9 +268,15 @@ function Dashboard({ tools, movements, topTools, totalStock, totalAvailable, bor
       <KpiCard label="En campo" value={borrowed.toString()} detail="Unidades prestadas" icon={<ArrowUpFromLine size={20} />} tone="blue" trend="12" trendLabel="trabajadores activos" />
       <KpiCard label="Devoluciones pendientes" value={overdue.toString()} detail="Requieren seguimiento" icon={<TriangleAlert size={20} />} tone="red" trend="3 vencidas" trendLabel="esta semana" />
     </section>
+    <OverdueAlerts tools={tools} onMovement={onMovement} onView={onView} />
     <section className="dashboard-grid"><div className="panel activity-panel"><div className="panel-heading"><div><div className="panel-kicker">Actividad reciente</div><h2>Últimos movimientos</h2></div><button className="text-button" onClick={() => onView("movimientos")}>Ver todos <span>→</span></button></div><div className="activity-list">{movements.slice(0, 4).map((movement) => <ActivityRow key={movement.id} movement={movement} />)}</div></div><div className="panel rotation-panel"><div className="panel-heading"><div><div className="panel-kicker">Demanda del mes</div><h2>Mayor rotación</h2></div><button className="square-button" onClick={() => onView("reportes")} aria-label="Ver reporte de rotación"><ArrowUpFromLine size={16} /></button></div><div className="rotation-list">{topTools.slice(0, 4).map((tool, index) => <div className="rotation-row" key={tool.id}><div className={`rank rank-${index + 1}`}>{String(index + 1).padStart(2, "0")}</div><div className="rotation-tool"><strong>{tool.name}</strong><span>{tool.code} · {tool.category}</span></div><div className="rotation-value"><strong>{tool.rotations}</strong><span>salidas</span></div><div className="sparkbar"><i style={{ width: `${Math.max(24, (tool.rotations / topTools[0].rotations) * 100)}%` }} /></div></div>)}</div></div></section>
     <section className="lower-grid"><div className="panel inventory-panel"><div className="panel-heading"><div><div className="panel-kicker">Vista rápida</div><h2>Inventario destacado</h2></div><button className="text-button" onClick={() => onView("inventario")}>Ver inventario <span>→</span></button></div><div className="tool-mini-grid">{tools.slice(0, 4).map((tool) => <ToolMiniCard key={tool.id} tool={tool} onMovement={onMovement} />)}</div></div><div className="panel shortcut-panel"><div className="panel-kicker">Acciones rápidas</div><h2>Registrar movimiento</h2><p>Elige una acción para iniciar un registro.</p><div className="shortcut-buttons"><button onClick={() => onMovement("Despacho")}><span className="shortcut-icon orange"><ArrowUpFromLine size={18} /></span><span><strong>Despachar herramienta</strong><small>Registrar una salida</small></span><span className="shortcut-arrow">→</span></button><button onClick={() => onMovement("Recepción")}><span className="shortcut-icon teal"><ArrowDownToLine size={18} /></span><span><strong>Recepcionar devolución</strong><small>Registrar un ingreso</small></span><span className="shortcut-arrow">→</span></button></div><div className="tip-box"><Sparkles size={16} /><span><strong>Tip del día:</strong> las llaves francesas tienen 22% más rotación que el mes pasado.</span></div></div></section>
   </>;
+}
+
+function OverdueAlerts({ tools, onMovement, onView }: { tools: Tool[]; onMovement: (type: MovementType, toolId?: string) => void; onView: (view: ViewName) => void }) {
+  const overdueTools = tools.filter((tool) => (tool.daysOut || 0) >= 7).sort((a, b) => (b.daysOut || 0) - (a.daysOut || 0));
+  return <section className="overdue-alerts"><div className="overdue-heading"><div className="overdue-title"><div className="alert-pulse"><TriangleAlert size={17} /></div><div><div className="panel-kicker">Seguimiento prioritario</div><h2>Herramientas con devolución atrasada</h2><p>Hay <strong>{overdueTools.length} herramientas</strong> fuera del almacén por más de 7 días.</p></div></div><button className="text-button" onClick={() => onView("movimientos")}>Ver historial <span>→</span></button></div><div className="overdue-list">{overdueTools.map((tool) => <div className="overdue-item" key={tool.id}><img src={tool.image} alt={tool.name} /><div className="overdue-tool"><strong>{tool.name}</strong><span>{tool.code} · {tool.location}</span></div><div className="overdue-holder"><span>Responsable</span><strong>{tool.holder || "Sin asignar"}</strong><small>{tool.holderCode || "—"}</small></div><div className="overdue-days"><strong>{tool.daysOut} días</strong><span>sin devolución</span></div><button className="overdue-action" onClick={() => onMovement("Recepción", tool.id)}><ArrowDownToLine size={14} />Registrar devolución</button></div>)}</div></section>;
 }
 
 function KpiCard({ label, value, detail, icon, tone, trend, trendLabel }: { label: string; value: string; detail: string; icon: React.ReactNode; tone: string; trend: string; trendLabel: string }) { return <div className="kpi-card"><div className="kpi-top"><div className={`kpi-icon ${tone}`}>{icon}</div><span className={`kpi-trend ${tone}`}>{trend}</span></div><div className="kpi-value">{value}</div><div className="kpi-label">{label}</div><div className="kpi-footer"><span>{detail}</span><span>{trendLabel}</span></div></div>; }
