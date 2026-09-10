@@ -7,6 +7,9 @@ import App from "./App";
 import "./index.css";
 
 const queryClient = new QueryClient();
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+}
 const trpcClient = trpc.createClient({
   links: [httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch(input, init) { return globalThis.fetch(input, { ...(init ?? {}), credentials: "include" }); } })],
 });
