@@ -25,6 +25,7 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(async ({ ctx }) => ctx.user),
     status: publicProcedure.query(async () => ({ users: await getUserCount(), requiresFirstUser: (await getUserCount()) === 0 })),
+    loginOptions: publicProcedure.query(async () => (await getUsers()).filter((user) => user.estado).map((user) => ({ id: user.id, nombre: user.nombre }))),
     registerFirst: publicProcedure.input(z.object({ nombre: z.string().trim().min(2).max(160), pin: pinSchema })).mutation(async ({ input, ctx }) => {
       if ((await getUserCount()) > 0) throw new TRPCError({ code: "CONFLICT", message: "Ya existe un usuario administrador." });
       const created = await createUser({ nombre: input.nombre, pin: input.pin, rol: "Admin" });
