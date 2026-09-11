@@ -9,10 +9,10 @@ import { storagePut } from "./storage";
 
 const optionalText = z.string().max(500).optional();
 const oldImportSchema = z.object({
-  units: z.array(z.object({ code: z.string(), name: z.string(), company: optionalText, site: optionalText })),
+  units: z.array(z.object({ code: z.string(), name: z.string(), marcobre: optionalText, site: optionalText })),
   locations: z.array(z.object({ code: z.string(), name: z.string(), zone: optionalText, description: optionalText, unitCode: optionalText, photoUrl: optionalText })),
   storekeepers: z.array(z.object({ code: z.string(), fullName: z.string(), employeeId: optionalText, phone: optionalText })),
-  workers: z.array(z.object({ code: z.string(), fullName: z.string(), area: optionalText, company: optionalText, unitCode: optionalText })),
+  workers: z.array(z.object({ code: z.string(), fullName: z.string(), area: optionalText, marcobre: optionalText, unitCode: optionalText })),
   tools: z.array(z.object({ code: z.string(), name: z.string(), category: optionalText, brand: optionalText, model: optionalText, serialNumber: optionalText, quantity: z.number().optional(), unitCode: optionalText, locationCode: optionalText, imageUrl: optionalText, notes: optionalText })),
 });
 const movementSchema = z.object({ toolId: z.number().int().positive(), workerId: z.number().int().positive(), storekeeperId: z.number().int().positive(), type: z.enum(["dispatch", "return", "transfer"]), quantity: z.number().int().positive(), note: optionalText, destination: optionalText, condition: optionalText });
@@ -49,12 +49,12 @@ export const appRouter = router({
     deactivateUser: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => deactivateUser(input.id)),
     createToolRecord: adminProcedure.input(z.object({ idTag: z.string().trim().min(1).max(100), descripcion: z.string().trim().min(1).max(2000), marca: optionalText })).mutation(({ input }) => createToolRecord(input)),
     deactivateTool: adminProcedure.input(z.object({ idTag: z.string().min(1), motivoBaja: z.string().trim().min(3).max(2000) })).mutation(({ input }) => deactivateTool(input.idTag, input.motivoBaja)),
-    createPersonal: adminProcedure.input(z.object({ codigoTrabajador: z.string().trim().min(1).max(80), nombreCompleto: z.string().trim().min(2).max(160), empresa: optionalText, tipo: z.string().trim().min(1).max(40) })).mutation(({ input }) => createPersonal(input)),
+    createPersonal: adminProcedure.input(z.object({ codigoTrabajador: z.string().trim().min(1).max(80), nombreCompleto: z.string().trim().min(2).max(160), marcobre: optionalText, tipo: z.string().trim().min(1).max(40) })).mutation(({ input }) => createPersonal(input)),
     deactivatePersonal: adminProcedure.input(z.object({ codigoTrabajador: z.string().min(1) })).mutation(({ input }) => deactivatePersonal(input.codigoTrabajador)),
-    createUnit: adminProcedure.input(z.object({ code: z.string(), name: z.string(), company: optionalText, site: optionalText })).mutation(({ input }) => createMiningUnit(input)),
+    createUnit: adminProcedure.input(z.object({ code: z.string(), name: z.string(), marcobre: optionalText, site: optionalText })).mutation(({ input }) => createMiningUnit(input)),
     createLocation: adminProcedure.input(z.object({ code: z.string(), name: z.string(), zone: optionalText, description: optionalText, unitId: z.number().optional(), photoUrl: optionalText, photoKey: optionalText })).mutation(({ input }) => createLocation(input)),
     createStorekeeper: adminProcedure.input(z.object({ code: z.string(), fullName: z.string(), employeeId: optionalText, phone: optionalText, password: pinSchema.optional() })).mutation(({ input }) => createStorekeeper(input)),
-    createWorker: adminProcedure.input(z.object({ code: z.string(), fullName: z.string(), area: optionalText, company: optionalText, unitId: z.number().optional() })).mutation(({ input }) => createWorker(input)),
+    createWorker: adminProcedure.input(z.object({ code: z.string(), fullName: z.string(), area: optionalText, marcobre: optionalText, unitId: z.number().optional() })).mutation(({ input }) => createWorker(input)),
     createTool: adminProcedure.input(z.object({ code: z.string(), name: z.string(), brand: optionalText, notes: optionalText, category: optionalText, model: optionalText, serialNumber: optionalText, quantity: z.number().optional(), unitId: z.number().optional(), locationId: z.number().optional(), imageUrl: optionalText, imageKey: optionalText })).mutation(({ input }) => createTool(input)),
     uploadImage: protectedProcedure.input(z.object({ fileName: z.string(), contentType: z.string().regex(/^image\/(jpeg|png|webp|heic)$/), dataUrl: z.string().min(30) })).mutation(async ({ input, ctx }) => { const match = input.dataUrl.match(/^data:[^;]+;base64,(.+)$/); if (!match) throw new Error("Invalid image data"); return storagePut(`tools/${ctx.user.id}/${Date.now()}-${input.fileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`, Buffer.from(match[1], "base64"), input.contentType); }),
   }),

@@ -20,7 +20,7 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
 export const catalogoPersonal = mysqlTable("catalogo_personal", {
   codigoTrabajador: varchar("Codigo_Trabajador", { length: 80 }).primaryKey(),
   nombreCompleto: varchar("Nombre_Completo", { length: 160 }).notNull(),
-  empresa: varchar("Empresa", { length: 160 }),
+  marcobre: varchar("Marcobre", { length: 160 }),
   tipo: varchar("Tipo", { length: 40 }).notNull(),
 });
 

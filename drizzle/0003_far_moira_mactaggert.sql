@@ -1,0 +1,1 @@
+ALTER TABLE `catalogo_personal` RENAME COLUMN `Empresa` TO `Marcobre`;
