@@ -16,6 +16,9 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
   ubicacion: varchar("Ubicacion", { length: 80 }),
   estadoActivo: int("Estado_Activo").default(1).notNull(),
   motivoBaja: text("Motivo_Baja"),
+  fechaIncidente: bigint("Fecha_Incidente", { mode: "number" }),
+  trabajadorResponsable: varchar("Trabajador_Responsable", { length: 160 }),
+  usuarioBaja: int("Usuario_Baja"),
   stock: int("Stock").default(1).notNull(),
 });
 

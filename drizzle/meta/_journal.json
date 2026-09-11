@@ -50,6 +50,13 @@
       "when": 1789126940067,
       "tag": "0006_melted_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1789139465161,
+      "tag": "0007_equal_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

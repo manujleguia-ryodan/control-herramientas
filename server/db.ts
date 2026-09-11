@@ -77,7 +77,7 @@ export async function getCatalogSnapshot() {
     db.select().from(movimientos).orderBy(desc(movimientos.fechaMovimiento)).limit(1000),
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
   ]);
-  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, quantity: tool.stock, availableQuantity: tool.stock, status: tool.estadoActivo ? (tool.stock > 0 ? "available" : "out_of_stock") : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, quantity: tool.stock, availableQuantity: tool.stock, status: tool.estadoActivo ? (tool.stock > 0 ? "available" : "out_of_stock") : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, incidentDate: tool.fechaIncidente, retirementWorker: tool.trabajadorResponsable, retirementUserId: tool.usuarioBaja, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, quantity: row.cantidadPrestada ?? 1, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
@@ -113,9 +113,9 @@ export async function deleteToolSafely(idTag: string) {
   await db.delete(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, idTag));
   return { success: true } as const;
 }
-export async function deactivateTool(idTag: string, motivoBaja: string) {
+export async function deactivateTool(idTag: string, motivoBaja: string, fechaIncidente: number, trabajadorResponsable: string, usuarioBaja: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.update(catalogoHerramientas).set({ estadoActivo: 0, motivoBaja: motivoBaja.trim() }).where(eq(catalogoHerramientas.idTag, idTag));
+  await db.update(catalogoHerramientas).set({ estadoActivo: 0, motivoBaja: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja }).where(eq(catalogoHerramientas.idTag, idTag));
   return { success: true } as const;
 }
 export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; marcobre?: string; tipo: string }) {

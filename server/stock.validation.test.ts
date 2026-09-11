@@ -19,3 +19,8 @@ describe("stock and import validation", () => {
     await expect(caller().movements.dispatch({ idTag: "T-01", codigoTrabajador: "P-01", userEntrega: 1, cantidad: 0 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
+
+
+  it("rejects quantities greater than one for serialized assets", async () => {
+    await expect(caller().movements.dispatch({ idTag: "T-01", codigoTrabajador: "P-01", userEntrega: 1, cantidad: 2 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
