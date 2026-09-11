@@ -72,6 +72,14 @@ export async function getCatalogSnapshot() {
 }
 export function emptyStats() { return { totalStock: 0, totalAvailable: 0, borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
 export async function getCounts() { const snapshot = await getCatalogSnapshot(); return snapshot.stats; }
+export async function searchTools(query = "") {
+  const db = await getDb();
+  if (!db) return [];
+  const normalized = query.trim();
+  if (!normalized) return db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.estadoActivo, 1)).orderBy(catalogoHerramientas.descripcion).limit(25);
+  const pattern = `%${normalized}%`;
+  return db.select().from(catalogoHerramientas).where(sql`(${catalogoHerramientas.idTag} LIKE ${pattern} OR ${catalogoHerramientas.descripcion} LIKE ${pattern}) AND ${catalogoHerramientas.estadoActivo} = 1`).orderBy(catalogoHerramientas.descripcion).limit(25);
+}
 
 // Compatibilidad de formularios heredados: estos catálogos ya no crean unidades/ubicaciones.
 export async function createMiningUnit(_input: { code: string; name: string; marcobre?: string; site?: string }) { return { success: true } as const; }
@@ -144,4 +152,34 @@ export async function importCsvCatalog(input: { herramientasCsv: string; persona
     if (personal.length) await tx.insert(catalogoPersonal).values(personal.map((row) => ({ codigoTrabajador: row.Codigo_Trabajador, nombreCompleto: row.Nombre_Completo, marcobre: row.Marcobre || undefined, tipo: row.Tipo })));
   });
   return { herramientas: herramientas.length, personal: personal.length };
+}
+
+export async function importToolsCsv(text: string) {
+  const herramientas = parseCsv(text, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion"]);
+  const ids = new Set<string>();
+  for (const row of herramientas) {
+    if (!row.ID_Tag || !row.Descripcion) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada herramienta debe incluir ID_Tag y Descripcion." });
+    if (ids.has(row.ID_Tag)) throw new TRPCError({ code: "CONFLICT", message: `ID_Tag duplicado dentro del archivo: ${row.ID_Tag}` });
+    ids.add(row.ID_Tag);
+  }
+  const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La base de datos no está disponible." });
+  const existing = await db.select({ idTag: catalogoHerramientas.idTag }).from(catalogoHerramientas);
+  for (const row of herramientas) if (existing.some((item) => item.idTag === row.ID_Tag)) throw new TRPCError({ code: "CONFLICT", message: `ID_Tag ya existe: ${row.ID_Tag}` });
+  if (herramientas.length) await db.insert(catalogoHerramientas).values(herramientas.map((row) => ({ idTag: row.ID_Tag, descripcion: row.Descripcion, marca: row.Marca || undefined, ubicacion: row.Ubicacion || undefined, estadoActivo: row.Estado_Activo === "0" ? 0 : 1 })));
+  return { herramientas: herramientas.length } as const;
+}
+
+export async function importPersonalCsv(text: string) {
+  const personal = parseCsv(text, ["Codigo_Trabajador", "Nombre_Completo", "Marcobre", "Tipo"]);
+  const codes = new Set<string>();
+  for (const row of personal) {
+    if (!row.Codigo_Trabajador || !row.Nombre_Completo || !row.Tipo) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada persona debe incluir Codigo_Trabajador, Nombre_Completo y Tipo." });
+    if (codes.has(row.Codigo_Trabajador)) throw new TRPCError({ code: "CONFLICT", message: `Código duplicado dentro del archivo: ${row.Codigo_Trabajador}` });
+    codes.add(row.Codigo_Trabajador);
+  }
+  const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La base de datos no está disponible." });
+  const existing = await db.select({ codigoTrabajador: catalogoPersonal.codigoTrabajador }).from(catalogoPersonal);
+  for (const row of personal) if (existing.some((item) => item.codigoTrabajador === row.Codigo_Trabajador)) throw new TRPCError({ code: "CONFLICT", message: `Código ya existe: ${row.Codigo_Trabajador}` });
+  if (personal.length) await db.insert(catalogoPersonal).values(personal.map((row) => ({ codigoTrabajador: row.Codigo_Trabajador, nombreCompleto: row.Nombre_Completo, marcobre: row.Marcobre || undefined, tipo: row.Tipo })));
+  return { personal: personal.length } as const;
 }

@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { clearSession, createSession, setSession } from "./internalSession";
 import { verifyPin } from "./pinAuth";
-import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, recordMovement, returnTransaction } from "./db";
+import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, importPersonalCsv, importToolsCsv, recordMovement, returnTransaction, searchTools } from "./db";
 import { storagePut } from "./storage";
 
 const optionalText = z.string().max(500).optional();
@@ -41,9 +41,10 @@ export const appRouter = router({
   }),
   catalog: router({
     snapshot: protectedProcedure.query(() => getCatalogSnapshot()),
+    searchTools: protectedProcedure.input(z.object({ query: z.string().trim().max(120).optional().default("") })).query(({ input }) => searchTools(input.query)),
     counts: protectedProcedure.query(() => getCounts()),
     import: adminProcedure.input(oldImportSchema).mutation(() => ({ success: true } as const)),
-    importCsv: adminProcedure.input(z.object({ herramientasCsv: z.string().min(1), personalCsv: z.string().min(1) })).mutation(({ input }) => importCsvCatalog(input)),
+    importCsv: adminProcedure.input(z.object({ herramientasCsv: z.string().min(1, "Adjunta herramientas.csv"), personalCsv: z.string().min(1, "Adjunta personal.csv") })).mutation(async ({ input }) => { try { return await importCsvCatalog(input); } catch (error) { if (error instanceof TRPCError) throw error; throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "No se pudo procesar el CSV." }); } }),
     users: adminProcedure.query(() => getUsers()),
     createUser: adminProcedure.input(z.object({ nombre: z.string().trim().min(2).max(160), pin: pinSchema, rol: z.enum(["Admin", "Almacen"]).default("Almacen") })).mutation(({ input }) => createUser(input)),
     deactivateUser: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => deactivateUser(input.id)),
