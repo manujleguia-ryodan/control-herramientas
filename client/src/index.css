@@ -299,3 +299,64 @@ h1 { margin-top: 8px; color: var(--ink); font-family: "DM Sans", sans-serif; fon
 
 .brand-mark img{width:27px;height:27px;object-fit:contain;border-radius:7px}.add-form input,.add-form select{height:42px!important;padding:8px 12px!important;background-color:#fff!important;border:1px solid #cbd5e1!important;border-radius:6px!important;width:100%!important}.add-form input:focus,.add-form select:focus{border-color:#ed6b35!important;box-shadow:0 0 0 3px rgba(237,107,53,.12)!important}
 .dispatch-unavailable{grid-column:1/-1;margin:-3px 0 4px;padding:14px 16px;color:#ef4444;background:#fff1f2;border:1px solid #fecdd3;border-radius:9px;font-size:1.2rem;font-weight:800;line-height:1.35}.typeahead-disabled{opacity:.58}.typeahead-disabled .search-box{background:#f1f5f9}.pos-modal input[readonly]{background:#f8fafc;color:#64748b}.pos-modal input[type=file]{height:auto;padding:10px;background:#fff}.pos-modal label small{display:block;margin-top:6px;color:#7b8794;font-size:10px;font-weight:500}
+
+
+/* Escala de lectura para computadora y tablet: títulos se conservan, texto operativo aumenta */
+.pos-app { font-size: 16px; }
+.pos-app p, .pos-app span, .pos-app label, .pos-app td, .pos-app th, .pos-app input, .pos-app select, .pos-app textarea, .pos-app button { font-size: 15px; }
+.pos-header { min-height: 78px; }
+.pos-brand strong { font-size: 23px; }
+.pos-brand small { font-size: 12px; }
+.pos-session { font-size: 15px; }
+.pos-tabs { gap: 8px; padding: 12px 28px; }
+.pos-tabs button { min-height: 44px; padding: 11px 15px; font-size: 15px; }
+.pos-tabs button b { min-width: 22px; height: 22px; font-size: 12px; }
+.pos-main { max-width: 1520px; padding: 34px 42px 58px; }
+.pos-title p { font-size: 16px; line-height: 1.5; }
+.dispatch-card, .pos-card { border-radius: 14px; }
+.typeahead > span { font-size: 15px; }
+.typeahead .search-box { min-height: 48px; }
+.typeahead .search-box input { min-height: 46px; font-size: 16px; }
+.typeahead .search-box button { width: 38px; height: 38px; }
+.suggestions button { padding: 12px 14px; }
+.suggestions button b, .suggestions button small { font-size: 15px; }
+.suggestions button small { margin-top: 4px; }
+.selected-chip { padding: 8px 11px; font-size: 14px; }
+.serial-notice, .dispatch-summary { padding: 13px 15px; font-size: 15px; }
+.pos-primary, .pos-secondary, .pos-danger, .pos-small, .retire-button, .file-button, .inventory-toolbar button { min-height: 44px; padding: 10px 16px; font-size: 15px; }
+.inventory-toolbar input, .report-toolbar > input, .report-toolbar label input { height: 48px; font-size: 15px; }
+.inventory-toolbar button { min-height: 44px; }
+.tool-card { gap: 13px; padding: 19px; }
+.tool-card b { font-size: 16px !important; }
+.tool-card span, .tool-card .tool-location { margin-top: 6px; font-size: 14px !important; }
+.tool-card em { font-size: 14px; }
+.tool-card p { font-size: 14px; }
+.loan-detail, .audit-detail { font-size: 13px !important; }
+.rotation-panel b { font-size: 15px; }
+.rotation-panel div span, .rotation-panel > em, .rotation-panel > span { font-size: 13px; }
+.rotation-panel > span { padding: 9px 11px; }
+.table-wrap { overflow-x: auto; }
+.table-wrap th { font-size: 13px; letter-spacing: .04em; }
+.table-wrap td { font-size: 15px; }
+.table-wrap td small { font-size: 13px; }
+.add-form h3, .bulk-card h3 { font-size: 17px; }
+.add-form input, .add-form select, .pos-login input, .pos-login select { height: 48px; padding: 0 13px; font-size: 15px; }
+.bulk-card p { font-size: 14px; }
+.bulk-actions > span { font-size: 13px; }
+.empty-state { min-height: 150px; font-size: 15px; }
+.pos-toast { padding: 14px 18px; font-size: 15px; }
+.pos-modal { width: min(560px, 100%); padding: 30px; }
+.pos-modal p { font-size: 15px; }
+.pos-modal label { font-size: 14px; }
+.pos-modal input, .pos-modal select, .pos-modal textarea { font-size: 15px; }
+.pos-modal input, .pos-modal select { min-height: 46px; padding: 0 12px; }
+.pos-modal textarea { padding: 12px; }
+.pos-modal label small { font-size: 13px; }
+.pos-login-card { width: min(470px, 100%); }
+.pos-login-card p { font-size: 15px; }
+.pos-login-card small { font-size: 13px; }
+.pos-error { font-size: 14px; }
+@media (max-width: 900px) and (min-width: 761px) {
+  .pos-main { padding-left: 28px; padding-right: 28px; }
+  .pos-tabs { padding-left: 20px; padding-right: 20px; overflow-x: auto; }
+}
