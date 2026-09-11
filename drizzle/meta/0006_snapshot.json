@@ -1,0 +1,382 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "5ecdc7a3-e057-4699-b2f0-6daa6b7a0321",
+  "prevId": "2bf03e59-72c2-4982-8929-15f28bf81116",
+  "tables": {
+    "catalogo_herramientas": {
+      "name": "catalogo_herramientas",
+      "columns": {
+        "ID_Tag": {
+          "name": "ID_Tag",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Descripcion": {
+          "name": "Descripcion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Marca": {
+          "name": "Marca",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Ubicacion": {
+          "name": "Ubicacion",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Estado_Activo": {
+          "name": "Estado_Activo",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "Motivo_Baja": {
+          "name": "Motivo_Baja",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Stock": {
+          "name": "Stock",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "catalogo_herramientas_ID_Tag": {
+          "name": "catalogo_herramientas_ID_Tag",
+          "columns": [
+            "ID_Tag"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "catalogo_personal": {
+      "name": "catalogo_personal",
+      "columns": {
+        "Codigo_Trabajador": {
+          "name": "Codigo_Trabajador",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Nombre_Completo": {
+          "name": "Nombre_Completo",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Marcobre": {
+          "name": "Marcobre",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Tipo": {
+          "name": "Tipo",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "catalogo_personal_Codigo_Trabajador": {
+          "name": "catalogo_personal_Codigo_Trabajador",
+          "columns": [
+            "Codigo_Trabajador"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "movimientos": {
+      "name": "movimientos",
+      "columns": {
+        "ID": {
+          "name": "ID",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "Tipo": {
+          "name": "Tipo",
+          "type": "enum('Entrada','Salida')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ID_Tag": {
+          "name": "ID_Tag",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Codigo_Trabajador": {
+          "name": "Codigo_Trabajador",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "User_ID": {
+          "name": "User_ID",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Cantidad": {
+          "name": "Cantidad",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Fecha_Movimiento": {
+          "name": "Fecha_Movimiento",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Transaccion_ID": {
+          "name": "Transaccion_ID",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Descripcion_Herramienta": {
+          "name": "Descripcion_Herramienta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Nombre_Trabajador": {
+          "name": "Nombre_Trabajador",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Observacion": {
+          "name": "Observacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "movimientos_ID": {
+          "name": "movimientos_ID",
+          "columns": [
+            "ID"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "transacciones": {
+      "name": "transacciones",
+      "columns": {
+        "ID": {
+          "name": "ID",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "ID_Tag": {
+          "name": "ID_Tag",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Codigo_Trabajador": {
+          "name": "Codigo_Trabajador",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "User_Entrega": {
+          "name": "User_Entrega",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Fecha_Salida": {
+          "name": "Fecha_Salida",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "User_Recibe": {
+          "name": "User_Recibe",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Fecha_Retorno": {
+          "name": "Fecha_Retorno",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Descripcion_Herramienta": {
+          "name": "Descripcion_Herramienta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Nombre_Trabajador": {
+          "name": "Nombre_Trabajador",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Marcobre_Trabajador": {
+          "name": "Marcobre_Trabajador",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "Cantidad_Prestada": {
+          "name": "Cantidad_Prestada",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "Estado": {
+          "name": "Estado",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Prestada'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "transacciones_ID": {
+          "name": "transacciones_ID",
+          "columns": [
+            "ID"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "usuarios": {
+      "name": "usuarios",
+      "columns": {
+        "ID": {
+          "name": "ID",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "Nombre": {
+          "name": "Nombre",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "PIN_Hash": {
+          "name": "PIN_Hash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "Rol": {
+          "name": "Rol",
+          "type": "enum('Admin','Almacen')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Almacen'"
+        },
+        "Estado": {
+          "name": "Estado",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "usuarios_ID": {
+          "name": "usuarios_ID",
+          "columns": [
+            "ID"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

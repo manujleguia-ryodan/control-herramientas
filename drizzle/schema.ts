@@ -41,6 +41,20 @@ export const transacciones = mysqlTable("transacciones", {
   estado: varchar("Estado", { length: 30 }).default("Prestada").notNull(),
 });
 
+export const movimientos = mysqlTable("movimientos", {
+  id: int("ID").autoincrement().primaryKey(),
+  tipo: mysqlEnum("Tipo", ["Entrada", "Salida"]).notNull(),
+  idTag: varchar("ID_Tag", { length: 100 }).notNull(),
+  codigoTrabajador: varchar("Codigo_Trabajador", { length: 80 }),
+  userId: int("User_ID").notNull(),
+  cantidad: int("Cantidad").notNull(),
+  fechaMovimiento: bigint("Fecha_Movimiento", { mode: "number" }).notNull(),
+  transaccionId: int("Transaccion_ID"),
+  descripcionHerramienta: text("Descripcion_Herramienta"),
+  nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
+  observacion: text("Observacion"),
+});
+
 /** Tipo de sesión interno. Se mantienen campos opcionales heredados para compatibilidad de compilación del shell. */
 export type User = {
   id: number;

@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { TRPCError } from "@trpc/server";
-import { catalogoHerramientas, catalogoPersonal, InsertUser, transacciones, usuarios } from "../drizzle/schema";
+import { catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { hashPin } from "./pinAuth";
 
@@ -58,17 +58,18 @@ export async function deactivateUser(id: number) {
 export async function getCatalogSnapshot() {
   const db = await getDb();
   if (!db) return { units: [], locations: [], storekeepers: [], workers: [], tools: [], movements: [], stats: emptyStats() };
-  const [herramientas, personal, tx, userRows] = await Promise.all([
+  const [herramientas, personal, tx, ledger, userRows] = await Promise.all([
     db.select().from(catalogoHerramientas).orderBy(catalogoHerramientas.descripcion),
     db.select().from(catalogoPersonal).orderBy(catalogoPersonal.nombreCompleto),
     db.select().from(transacciones).orderBy(desc(transacciones.fechaSalida)).limit(500),
+    db.select().from(movimientos).orderBy(desc(movimientos.fechaMovimiento)).limit(1000),
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
   ]);
   const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, quantity: tool.stock, availableQuantity: tool.stock, status: tool.estadoActivo ? (tool.stock > 0 ? "available" : "out_of_stock") : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, quantity: row.cantidadPrestada ?? 1, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
-  return { units: [], locations: [], storekeepers, workers, tools, movements, stats: { ...emptyStats(), totalStock: tools.reduce((sum, tool) => sum + tool.quantity, 0), totalAvailable: tools.reduce((sum, tool) => sum + tool.availableQuantity, 0), totalTools: tools.length, totalMovements: movements.length } };
+  return { units: [], locations: [], storekeepers, workers, tools, movements, movementLog: ledger, stats: { ...emptyStats(), totalStock: tools.reduce((sum, tool) => sum + tool.quantity, 0), totalAvailable: tools.reduce((sum, tool) => sum + tool.availableQuantity, 0), totalTools: tools.length, totalMovements: movements.length } };
 }
 export function emptyStats() { return { totalStock: 0, totalAvailable: 0, borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
 export async function getCounts() { const snapshot = await getCatalogSnapshot(); return snapshot.stats; }
@@ -137,7 +138,9 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     if (cantidad > tool.stock) throw new TRPCError({ code: "BAD_REQUEST", message: `Stock insuficiente. Disponible: ${tool.stock}.` });
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
     await tx.update(catalogoHerramientas).set({ stock: tool.stock - cantidad }).where(eq(catalogoHerramientas.idTag, input.idTag));
-    await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: peruNow(), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, cantidadPrestada: cantidad, estado: "Prestada" });
+    const fecha = peruNow();
+    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, cantidadPrestada: cantidad, estado: "Prestada" });
+    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, cantidad, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho de herramienta" });
     return { success: true } as const;
   });
 }
@@ -149,7 +152,9 @@ export async function returnTransaction(idTag: string, userRecibe: number, movem
     if (!open || open.fechaRetorno) throw new TRPCError({ code: "NOT_FOUND", message: "No existe un préstamo activo seleccionado." });
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, open.idTag)).limit(1))[0];
     if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta ya no existe." });
-    await tx.update(transacciones).set({ userRecibe, fechaRetorno: peruNow(), estado: "Devuelto" }).where(eq(transacciones.id, open.id));
+    const fechaEntrada = peruNow();
+    await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto" }).where(eq(transacciones.id, open.id));
+    await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, cantidad: open.cantidadPrestada ?? 1, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, observacion: "Recepción de devolución" });
     await tx.update(catalogoHerramientas).set({ stock: tool.stock + (open.cantidadPrestada ?? 1), estadoActivo: 1 }).where(eq(catalogoHerramientas.idTag, open.idTag));
     return { success: true, movementId: open.id } as const;
   });
