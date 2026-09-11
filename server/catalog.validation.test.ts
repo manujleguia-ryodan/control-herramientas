@@ -43,14 +43,13 @@ describe("catalog input validation", () => {
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("rejects movement quantities below one", async () => {
+  it("rejects a duplicate active serialized loan", async () => {
     await expect(caller().movements.create({
       toolId: 1,
       workerId: 1,
       storekeeperId: 1,
       type: "dispatch",
-      quantity: 0,
-    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });
 

@@ -15,11 +15,6 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
   marca: varchar("Marca", { length: 120 }),
   ubicacion: varchar("Ubicacion", { length: 80 }),
   estadoActivo: int("Estado_Activo").default(1).notNull(),
-  motivoBaja: text("Motivo_Baja"),
-  fechaIncidente: bigint("Fecha_Incidente", { mode: "number" }),
-  trabajadorResponsable: varchar("Trabajador_Responsable", { length: 160 }),
-  usuarioBaja: int("Usuario_Baja"),
-  stock: int("Stock").default(1).notNull(),
 });
 
 export const catalogoPersonal = mysqlTable("catalogo_personal", {
@@ -40,7 +35,6 @@ export const transacciones = mysqlTable("transacciones", {
   descripcionHerramienta: text("Descripcion_Herramienta"),
   nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
   marcobreTrabajador: varchar("Marcobre_Trabajador", { length: 160 }),
-  cantidadPrestada: int("Cantidad_Prestada").default(1).notNull(),
   estado: varchar("Estado", { length: 30 }).default("Prestada").notNull(),
 });
 
@@ -50,7 +44,6 @@ export const movimientos = mysqlTable("movimientos", {
   idTag: varchar("ID_Tag", { length: 100 }).notNull(),
   codigoTrabajador: varchar("Codigo_Trabajador", { length: 80 }),
   userId: int("User_ID").notNull(),
-  cantidad: int("Cantidad").notNull(),
   fechaMovimiento: bigint("Fecha_Movimiento", { mode: "number" }).notNull(),
   transaccionId: int("Transaccion_ID"),
   descripcionHerramienta: text("Descripcion_Herramienta"),
@@ -78,3 +71,12 @@ export type InsertUser = { nombre: string; pinHash: string; rol?: "Admin" | "Alm
 export type Herramienta = typeof catalogoHerramientas.$inferSelect;
 export type Personal = typeof catalogoPersonal.$inferSelect;
 export type Transaccion = typeof transacciones.$inferSelect;
+
+export const bajasHerramientas = mysqlTable("bajas_herramientas", {
+  id: int("ID").autoincrement().primaryKey(),
+  idTag: varchar("ID_Tag", { length: 100 }).notNull(),
+  motivo: text("Motivo").notNull(),
+  fechaIncidente: bigint("Fecha_Incidente", { mode: "number" }).notNull(),
+  trabajadorResponsable: varchar("Trabajador_Responsable", { length: 160 }).notNull(),
+  usuarioBaja: int("Usuario_Baja").notNull(),
+});

@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const db='/home/ubuntu/control-herramientas/server/db.ts'; let d=fs.readFileSync(db,'utf8');
+d=d.replace(/status: tool\.estadoActivo \? \(tool\.stock > 0 \? "available" : "out_of_stock"\) : "retired", imageUrl: null, locationId: null, rotations: tx\.filter\(\(row\) => row\.idTag === tool\.idTag\)\.length, incidentDate: tool\.fechaIncidente, holder:/, 'status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder:');
+d=d.replace('estadoActivo: input.estadoActivo ?? 1, motivoBaja: input.motivoBaja','estadoActivo: input.estadoActivo ?? 1');
+d=d.replace(/    if \(cantidad > tool\.stock\)[^\n]*\n    await tx\.update\(catalogoHerramientas\)\.set\(\{ stock: tool\.stock - cantidad \}\)\.where\(eq\(catalogoHerramientas\.idTag, input\.idTag\)\);\n/g,'');
+fs.writeFileSync(db,d);
+const h='/home/ubuntu/control-herramientas/client/src/pages/Home.tsx'; let x=fs.readFileSync(h,'utf8');
+x=x.replace('tool.status !== "retired" && tool.availableQuantity > 0','tool.status !== "retired"');
+x=x.replace(' ${row.cantidad} ${user}`',' ${user}`');
+fs.writeFileSync(h,x);

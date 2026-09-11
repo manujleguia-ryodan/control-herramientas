@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+const db='/home/ubuntu/control-herramientas/server/db.ts'; let d=fs.readFileSync(db,'utf8');
+d=d.replace('type: "dispatch" | "return" | "transfer"; quantity: number; note?', 'type: "dispatch" | "return" | "transfer"; note?');
+d=d.replace('    db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),\n  ]);','    db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),\n    db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)),\n  ]);')
+d=d.replace('const [herramientas, personal, tx, ledger, userRows]', 'const [herramientas, personal, tx, ledger, userRows, bajas]');
+d=d.replace('notes: null }));','notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null }));');
+fs.writeFileSync(db,d);
+const router='/home/ubuntu/control-herramientas/server/routers.ts'; let r=fs.readFileSync(router,'utf8');
+r=r.replace('const movementSchema = z.object({ toolId: z.number().int().positive(), workerId: z.number().int().positive(), storekeeperId: z.number().int().positive(), type: z.enum(["dispatch", "return", "transfer"]), quantity: z.number().int().positive(), note:', 'const movementSchema = z.object({ toolId: z.number().int().positive(), workerId: z.number().int().positive(), storekeeperId: z.number().int().positive(), type: z.enum(["dispatch", "return", "transfer"]), note:');
+r=r.replace('motivoBaja: z.string().trim().min(3).max(2000), fechaIncidente: z.number().int().positive(), trabajadorResponsable: z.string().trim().min(1).max(160), usuarioBaja: z.number().int().positive() })).mutation(({ input }) => deactivateTool(input.idTag, input.motivoBaja, input.fechaIncidente, input.trabajadorResponsable, input.usuarioBaja))','motivoBaja: z.string().trim().min(3).max(2000), fechaIncidente: z.number().int().positive(), trabajadorResponsable: z.string().trim().min(1).max(160) })).mutation(({ input, ctx }) => deactivateTool(input.idTag, input.motivoBaja, input.fechaIncidente, input.trabajadorResponsable, ctx.user.id))');
+fs.writeFileSync(router,r);
+const home='/home/ubuntu/control-herramientas/client/src/pages/Home.tsx'; let h=fs.readFileSync(home,'utf8');
+h=h.replace('const [incidentDate, setIncidentDate] = useState(""); const [retirementWorker, setRetirementWorker] = useState("");','const [incidentDate, setIncidentDate] = useState(""); const [retirementWorker, setRetirementWorker] = useState("");');
+h=h.replace(', usuarioBaja: me.data!.id','');
+h=h.replace('const line=`${new Date(row.fechaMovimiento).toLocaleString("es-PE",{timeZone:"America/Lima"})} | ${row.tipo} | ${row.idTag} ${row.descripcionHerramienta ?? ""} | ${row.nombreTrabajador ?? row.codigoTrabajador ?? "-"} | ${row.cantidad} | ${user}`;', 'const line=`${new Date(row.fechaMovimiento).toLocaleString("es-PE",{timeZone:"America/Lima"})} | ${row.tipo} | ${row.idTag} ${row.descripcionHerramienta ?? ""} | ${row.nombreTrabajador ?? row.codigoTrabajador ?? "-"} | ${user}`;');
+fs.writeFileSync(home,h);

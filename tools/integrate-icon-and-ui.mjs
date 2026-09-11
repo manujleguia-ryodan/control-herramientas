@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const p='/home/ubuntu/control-herramientas/client/src/pages/Home.tsx'; let s=fs.readFileSync(p,'utf8');
+s=s.replace('<div className="brand-mark"><Wrench size={20} /></div>','<div className="brand-mark"><img src="/icon-inventory.svg" alt="" /></div>');
+s=s.replace('<div className="modal-kicker"><ShieldAlert size={17} />BAJA LÓGICA</div>','<div className="modal-kicker"><ShieldAlert size={17} />BAJA LÓGICA</div>');
+fs.writeFileSync(p,s);
+const css='/home/ubuntu/control-herramientas/client/src/index.css'; let c=fs.readFileSync(css,'utf8');
+c += '\n.brand-mark img{width:27px;height:27px;object-fit:contain;border-radius:7px}.add-form input,.add-form select{height:42px!important;padding:8px 12px!important;background-color:#fff!important;border:1px solid #cbd5e1!important;border-radius:6px!important;width:100%!important}.add-form input:focus,.add-form select:focus{border-color:#ed6b35!important;box-shadow:0 0 0 3px rgba(237,107,53,.12)!important}\n';
+fs.writeFileSync(css,c);
+const html='/home/ubuntu/control-herramientas/client/index.html'; let h=fs.readFileSync(html,'utf8');
+if(!h.includes('icon-inventory.svg')) h=h.replace('<title>Almacén+ · Control de herramientas</title>','<title>Almacén+ · Control de herramientas</title>\n    <link rel="icon" type="image/svg+xml" href="/icon-inventory.svg" />');
+fs.writeFileSync(html,h);

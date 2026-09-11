@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { TRPCError } from "@trpc/server";
-import { catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
+import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { hashPin } from "./pinAuth";
 
@@ -70,20 +70,21 @@ export async function deactivateUser(id: number) {
 export async function getCatalogSnapshot() {
   const db = await getDb();
   if (!db) return { units: [], locations: [], storekeepers: [], workers: [], tools: [], movements: [], stats: emptyStats() };
-  const [herramientas, personal, tx, ledger, userRows] = await Promise.all([
+  const [herramientas, personal, tx, ledger, userRows, bajas] = await Promise.all([
     db.select().from(catalogoHerramientas).orderBy(catalogoHerramientas.descripcion),
     db.select().from(catalogoPersonal).orderBy(catalogoPersonal.nombreCompleto),
     db.select().from(transacciones).orderBy(desc(transacciones.fechaSalida)).limit(500),
     db.select().from(movimientos).orderBy(desc(movimientos.fechaMovimiento)).limit(1000),
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
+    db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)),
   ]);
-  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, quantity: tool.stock, availableQuantity: tool.stock, status: tool.estadoActivo ? (tool.stock > 0 ? "available" : "out_of_stock") : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, incidentDate: tool.fechaIncidente, retirementWorker: tool.trabajadorResponsable, retirementUserId: tool.usuarioBaja, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
-  const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, quantity: row.cantidadPrestada ?? 1, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
+  const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
-  return { units: [], locations: [], storekeepers, workers, tools, movements, movementLog: ledger, stats: { ...emptyStats(), totalStock: tools.reduce((sum, tool) => sum + tool.quantity, 0), totalAvailable: tools.reduce((sum, tool) => sum + tool.availableQuantity, 0), totalTools: tools.length, totalMovements: movements.length } };
+  return { units: [], locations: [], storekeepers, workers, tools, movements, movementLog: ledger, stats: { ...emptyStats(), totalTools: tools.length, totalMovements: movements.length } };
 }
-export function emptyStats() { return { totalStock: 0, totalAvailable: 0, borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
+export function emptyStats() { return { borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
 export async function getCounts() { const snapshot = await getCatalogSnapshot(); return snapshot.stats; }
 export async function searchTools(query = "") {
   const db = await getDb();
@@ -101,9 +102,9 @@ export async function createStorekeeper(input: { code: string; fullName: string;
 export async function createWorker(input: { code: string; fullName: string; area?: string; marcobre?: string; unitId?: number }) { return createPersonal({ codigoTrabajador: input.code, nombreCompleto: input.fullName, marcobre: input.marcobre, tipo: input.area ?? "Almacen" }); }
 export async function createTool(input: { code: string; name: string; brand?: string; notes?: string }) { return createToolRecord({ idTag: input.code, descripcion: input.name, marca: input.brand, motivoBaja: input.notes }); }
 
-export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; ubicacion?: string; estadoActivo?: number; motivoBaja?: string; stock?: number }) {
+export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; ubicacion?: string; estadoActivo?: number; motivoBaja?: string;  }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, ubicacion: input.ubicacion, estadoActivo: input.estadoActivo ?? 1, motivoBaja: input.motivoBaja, stock: input.stock ?? 1 });
+  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, ubicacion: input.ubicacion, estadoActivo: input.estadoActivo ?? 1 });
   return { success: true } as const;
 }
 export async function deleteToolSafely(idTag: string) {
@@ -115,7 +116,8 @@ export async function deleteToolSafely(idTag: string) {
 }
 export async function deactivateTool(idTag: string, motivoBaja: string, fechaIncidente: number, trabajadorResponsable: string, usuarioBaja: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.update(catalogoHerramientas).set({ estadoActivo: 0, motivoBaja: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja }).where(eq(catalogoHerramientas.idTag, idTag));
+  await db.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, idTag));
+  await db.insert(bajasHerramientas).values({ idTag, motivo: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja });
   return { success: true } as const;
 }
 export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; marcobre?: string; tipo: string }) {
@@ -129,7 +131,7 @@ export async function deactivatePersonal(codigoTrabajador: string) {
   return { success: true } as const;
 }
 
-export async function recordMovement(input: { toolId: number; workerId: number; storekeeperId: number; type: "dispatch" | "return" | "transfer"; quantity: number; note?: string; destination?: string; condition?: string }) {
+export async function recordMovement(input: { toolId: number; workerId: number; storekeeperId: number; type: "dispatch" | "return" | "transfer"; note?: string; destination?: string; condition?: string }) {
   const snapshot = await getCatalogSnapshot();
   const tool = snapshot.tools.find((row) => row.id === input.toolId);
   const worker = snapshot.workers.find((row) => row.id === input.workerId);
@@ -139,20 +141,18 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
 }
 // Unix timestamps are timezone-independent; the UI formats them with America/Lima (UTC-5).
 function peruNow() { return Date.now(); }
-export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; cantidad?: number }) {
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  const cantidad = input.cantidad ?? 1;
-  if (!Number.isInteger(cantidad) || cantidad < 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La cantidad debe ser un entero mayor que cero." });
   return db.transaction(async (tx) => {
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
     const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
     if (!tool || !tool.estadoActivo) throw new TRPCError({ code: "NOT_FOUND", message: "Herramienta no encontrada o fuera de servicio." });
-    if (cantidad > tool.stock) throw new TRPCError({ code: "BAD_REQUEST", message: `Stock insuficiente. Disponible: ${tool.stock}.` });
+    const activeLoan = (await tx.select({ codigoTrabajador: transacciones.codigoTrabajador, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(and(eq(transacciones.idTag, input.idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
+    if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `Error: Esta herramienta no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
-    await tx.update(catalogoHerramientas).set({ stock: tool.stock - cantidad }).where(eq(catalogoHerramientas.idTag, input.idTag));
     const fecha = peruNow();
-    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, cantidadPrestada: cantidad, estado: "Prestada" });
-    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, cantidad, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho de herramienta" });
+    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada" });
+    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho de herramienta" });
     return { success: true } as const;
   });
 }
@@ -166,8 +166,7 @@ export async function returnTransaction(idTag: string, userRecibe: number, movem
     if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta ya no existe." });
     const fechaEntrada = peruNow();
     await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto" }).where(eq(transacciones.id, open.id));
-    await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, cantidad: open.cantidadPrestada ?? 1, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, observacion: "Recepción de devolución" });
-    await tx.update(catalogoHerramientas).set({ stock: tool.stock + (open.cantidadPrestada ?? 1), estadoActivo: 1 }).where(eq(catalogoHerramientas.idTag, open.idTag));
+    await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, observacion: "Recepción de devolución" });
     return { success: true, movementId: open.id } as const;
   });
 }
@@ -198,11 +197,11 @@ export async function importCsvCatalog(input: { herramientasCsv: string; persona
 }
 
 export async function importToolsCsv(text: string) {
-  const herramientas = parseCsv(text, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion", "Cantidad"]);
+  const herramientas = parseCsv(text, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion"]);
   const ids = new Set<string>();
   for (const row of herramientas) { row.ID_Tag = row.ID_Tag.trim(); if (!row.ID_Tag) continue; if (!row.Descripcion.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada herramienta debe incluir Descripcion." }); if (ids.has(row.ID_Tag)) throw new TRPCError({ code: "CONFLICT", message: `ID_Tag duplicado dentro del archivo: ${row.ID_Tag}` }); ids.add(row.ID_Tag); }
   const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La base de datos no está disponible." });
-  for (const row of herramientas) { if (!row.ID_Tag) continue; const cantidad = Number(row.Cantidad || "1"); if (!Number.isInteger(cantidad) || cantidad < 1) throw new TRPCError({ code: "BAD_REQUEST", message: `Cantidad inválida para ${row.ID_Tag}.` }); const existing = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, row.ID_Tag)).limit(1))[0]; if (existing) await db.update(catalogoHerramientas).set({ descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined }).where(eq(catalogoHerramientas.idTag, row.ID_Tag)); else await db.insert(catalogoHerramientas).values({ idTag: row.ID_Tag, descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined, estadoActivo: row.Estado_Activo.trim() === "0" ? 0 : 1, stock: cantidad }); }
+  for (const row of herramientas) { if (!row.ID_Tag) continue; const existing = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, row.ID_Tag)).limit(1))[0]; if (existing) await db.update(catalogoHerramientas).set({ descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined }).where(eq(catalogoHerramientas.idTag, row.ID_Tag)); else await db.insert(catalogoHerramientas).values({ idTag: row.ID_Tag, descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined, estadoActivo: row.Estado_Activo.trim() === "0" ? 0 : 1 }); }
   return { herramientas: herramientas.filter((row) => row.ID_Tag).length } as const;
 }
 

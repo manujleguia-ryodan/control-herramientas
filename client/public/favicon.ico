@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Almacén+">
+  <rect width="128" height="128" rx="28" fill="#1e293b"/>
+  <path d="M24 45 64 25l40 20v43L64 108 24 88V45Z" fill="none" stroke="#f97345" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M24 45l40 22 40-22M64 67v41" fill="none" stroke="#f97345" stroke-width="6" stroke-linejoin="round"/>
+  <path d="m78 36 9 9-10 10-6-2-11 11a9 9 0 1 1-6-6l11-11-2-6 10-10 5 5-5 5 5 5 5-5Z" fill="#1e293b" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+</svg>
