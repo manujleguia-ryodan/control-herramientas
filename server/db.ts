@@ -48,6 +48,18 @@ export async function createUser(input: { nombre: string; pin: string; rol?: "Ad
   const result = await db.insert(usuarios).values({ nombre: input.nombre.trim(), pinHash: hashPin(input.pin), rol: input.rol ?? "Almacen", estado: 1 });
   return { success: true, id: Number(result[0].insertId) } as const;
 }
+export async function deleteUserSafely(id: number, actingUserId: number) {
+  const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  if (id === actingUserId) throw new TRPCError({ code: "BAD_REQUEST", message: "No puedes eliminar tu propio usuario administrador." });
+  const target = (await db.select().from(usuarios).where(eq(usuarios.id, id)).limit(1))[0];
+  if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "El usuario no existe." });
+  if (target.rol === "Admin") {
+    const admins = await db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.rol, "Admin"));
+    if (admins.length <= 1) throw new TRPCError({ code: "CONFLICT", message: "No se puede eliminar al último Administrador." });
+  }
+  await db.delete(usuarios).where(eq(usuarios.id, id));
+  return { success: true } as const;
+}
 export async function deactivateUser(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");

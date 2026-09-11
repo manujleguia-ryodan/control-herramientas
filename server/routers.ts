@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { clearSession, createSession, setSession } from "./internalSession";
 import { verifyPin } from "./pinAuth";
-import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deleteToolSafely, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, importPersonalCsv, importToolsCsv, recordMovement, returnTransaction, searchTools } from "./db";
+import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deleteToolSafely, deleteUserSafely, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, importPersonalCsv, importToolsCsv, recordMovement, returnTransaction, searchTools } from "./db";
 import { storagePut } from "./storage";
 
 const optionalText = z.string().max(500).optional();
@@ -48,6 +48,7 @@ export const appRouter = router({
     users: adminProcedure.query(() => getUsers()),
     createUser: adminProcedure.input(z.object({ nombre: z.string().trim().min(2).max(160), pin: pinSchema, rol: z.enum(["Admin", "Almacen"]).default("Almacen") })).mutation(({ input }) => createUser(input)),
     deactivateUser: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => deactivateUser(input.id)),
+    deleteUserSafely: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input, ctx }) => deleteUserSafely(input.id, ctx.user.id)),
     createToolRecord: adminProcedure.input(z.object({ idTag: z.string().trim().min(1).max(100), descripcion: z.string().trim().min(1).max(2000), marca: optionalText, ubicacion: z.string().trim().max(80).optional(), stock: z.number().int().positive().default(1) })).mutation(({ input }) => createToolRecord(input)),
     deactivateTool: adminProcedure.input(z.object({ idTag: z.string().min(1), motivoBaja: z.string().trim().min(3).max(2000) })).mutation(({ input }) => deactivateTool(input.idTag, input.motivoBaja)),
     deleteToolSafely: adminProcedure.input(z.object({ idTag: z.string().min(1) })).mutation(({ input }) => deleteToolSafely(input.idTag)),
