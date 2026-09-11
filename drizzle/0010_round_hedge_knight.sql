@@ -1,0 +1,1 @@
+ALTER TABLE `bajas_herramientas` DROP COLUMN `Fotos_JSON`;

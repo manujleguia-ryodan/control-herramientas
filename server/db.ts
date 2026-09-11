@@ -4,6 +4,10 @@ import { TRPCError } from "@trpc/server";
 import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { hashPin } from "./pinAuth";
+import fs from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import path from "node:path";
+import PDFDocument from "pdfkit";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -120,6 +124,65 @@ export async function deactivateTool(idTag: string, motivoBaja: string, fechaInc
   await db.insert(bajasHerramientas).values({ idTag, motivo: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja });
   return { success: true } as const;
 }
+export type RetirementReportInput = { idTag: string; motivo: string; fechaIncidente: number; supervisorCodigo: string; usuarioBaja: number; photos: Array<{ buffer: Buffer; originalname: string; mimetype: string }> };
+
+function safeFilePart(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80); }
+
+export async function createRetirementReport(input: RetirementReportInput) {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  const tool = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
+  const supervisor = (await db.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.supervisorCodigo)).limit(1))[0];
+  const user = (await db.select().from(usuarios).where(eq(usuarios.id, input.usuarioBaja)).limit(1))[0];
+  if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta no existe." });
+  if (!supervisor) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona un supervisor válido." });
+  if (!input.motivo.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "El motivo es obligatorio." });
+  const now = input.fechaIncidente || Date.now();
+  const baseDir = path.join(process.cwd(), "storage", "bajas", safeFilePart(input.idTag));
+  await fs.mkdir(baseDir, { recursive: true });
+  const photoPaths: string[] = [];
+  for (let i = 0; i < Math.min(input.photos.length, 5); i++) {
+    const photo = input.photos[i];
+    const ext = path.extname(photo.originalname).toLowerCase() || ".jpg";
+    const target = path.join(baseDir, `${i + 1}${ext}`);
+    await fs.writeFile(target, photo.buffer);
+    photoPaths.push(target);
+  }
+  const datePart = new Date(now).toISOString().slice(0, 10).replace(/-/g, "");
+  const pdfNombre = `Reporte_FS_${safeFilePart(input.idTag)}_${datePart}.pdf`;
+  const pdfPath = path.join(baseDir, pdfNombre);
+  await new Promise<void>((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 48 });
+    const out = createWriteStream(pdfPath);
+    doc.pipe(out);
+    doc.fontSize(16).font("Helvetica-Bold").text("REPORTE DE HERRAMIENTA FUERA DE SERVICIO", { align: "center" });
+    doc.moveDown(1.5).fontSize(10).font("Helvetica");
+    const lines = [
+      ["Herramienta", tool.descripcion], ["Código", tool.idTag],
+      ["Fecha/Hora", new Date(now).toLocaleString("es-PE", { timeZone: "America/Lima" })],
+      ["Almacenero Responsable", user?.nombre ?? `Usuario #${input.usuarioBaja}`],
+      ["Supervisor Responsable", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`],
+      ["Descripción del Evento", input.motivo.trim()],
+    ];
+    for (const [label, value] of lines) { doc.font("Helvetica-Bold").text(`${label}:`, { continued: true }); doc.font("Helvetica").text(` ${value}`); doc.moveDown(.45); }
+    if (photoPaths.length) {
+      doc.moveDown(.8).font("Helvetica-Bold").text("Evidencias fotográficas").moveDown(.5);
+      let x = 48; let y = doc.y;
+      for (const photoPath of photoPaths) {
+        try { doc.image(photoPath, x, y, { fit: [235, 155], align: "center", valign: "center" }); } catch {}
+        x += 250;
+        if (x > 300) { x = 48; y += 175; if (y > 650) { doc.addPage(); y = 48; } }
+      }
+    }
+    doc.end(); out.on("finish", () => resolve()); out.on("error", reject);
+  });
+  await db.transaction(async (tx) => {
+    await tx.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, input.idTag));
+    await tx.insert(bajasHerramientas).values({ idTag: input.idTag, motivo: input.motivo.trim(), fechaIncidente: now, trabajadorResponsable: supervisor.nombreCompleto, usuarioBaja: input.usuarioBaja, supervisorCodigo: supervisor.codigoTrabajador, pdfNombre });
+  });
+  return { pdfPath, pdfNombre, tool: input.idTag };
+}
+
 export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; marcobre?: string; tipo: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   await db.insert(catalogoPersonal).values({ codigoTrabajador: input.codigoTrabajador.trim(), nombreCompleto: input.nombreCompleto.trim(), marcobre: input.marcobre, tipo: input.tipo.trim() });

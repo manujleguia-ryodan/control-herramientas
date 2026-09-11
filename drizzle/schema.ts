@@ -79,4 +79,6 @@ export const bajasHerramientas = mysqlTable("bajas_herramientas", {
   fechaIncidente: bigint("Fecha_Incidente", { mode: "number" }).notNull(),
   trabajadorResponsable: varchar("Trabajador_Responsable", { length: 160 }).notNull(),
   usuarioBaja: int("Usuario_Baja").notNull(),
+  supervisorCodigo: varchar("Supervisor_Codigo", { length: 80 }),
+  pdfNombre: varchar("PDF_Nombre", { length: 220 }),
 });

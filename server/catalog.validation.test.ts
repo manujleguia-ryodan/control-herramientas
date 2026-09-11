@@ -43,13 +43,13 @@ describe("catalog input validation", () => {
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
-  it("rejects a duplicate active serialized loan", async () => {
+  it("rejects a dispatch when the serialized tool is not in the catalog", async () => {
     await expect(caller().movements.create({
       toolId: 1,
       workerId: 1,
       storekeeperId: 1,
       type: "dispatch",
-    })).rejects.toMatchObject({ code: "CONFLICT" });
+    })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
 

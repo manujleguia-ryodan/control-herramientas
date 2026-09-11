@@ -11,7 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { getSessionUser } from "../internalSession";
-import { importPersonalCsv, importToolsCsv } from "../db";
+import { createRetirementReport, importPersonalCsv, importToolsCsv } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,7 +38,7 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 5 } });
   const multipartImport = (kind: "tools" | "personal") => [upload.single("file"), async (req: express.Request, res: express.Response) => {
     try {
       const user = await getSessionUser(req);
@@ -55,6 +55,20 @@ async function startServer() {
       return res.status(status).json({ ok: false, message });
     }
   }];
+  app.post("/api/retirements/report", upload.array("photos", 5), async (req: express.Request, res: express.Response) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, message: "Debes iniciar sesión." });
+      const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+      if (files.length > 5) return res.status(400).json({ ok: false, message: "Puedes adjuntar máximo 5 fotos." });
+      const result = await createRetirementReport({ idTag: String(req.body.idTag ?? ""), motivo: String(req.body.motivo ?? ""), fechaIncidente: Number(req.body.fechaIncidente ?? Date.now()), supervisorCodigo: String(req.body.supervisorCodigo ?? ""), usuarioBaja: user.id, photos: files });
+      return res.download(result.pdfPath, result.pdfNombre, (error) => { if (error && !res.headersSent) res.status(500).json({ ok: false, message: "No se pudo descargar el PDF." }); });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo generar el reporte.";
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      return res.status(code === "NOT_FOUND" ? 404 : code === "CONFLICT" ? 409 : 400).json({ ok: false, message });
+    }
+  });
   app.post("/api/import/tools", ...multipartImport("tools"));
   app.post("/api/import/personal", ...multipartImport("personal"));
   registerStorageProxy(app);
