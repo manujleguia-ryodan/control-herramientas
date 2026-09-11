@@ -36,6 +36,13 @@
       "when": 1789113188044,
       "tag": "0004_green_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1789123477074,
+      "tag": "0005_brainy_prodigy",
+      "breakpoints": true
     }
   ]
 }

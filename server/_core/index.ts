@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import multer from "multer";
+import * as XLSX from "xlsx";
 import { getSessionUser } from "../internalSession";
 import { importPersonalCsv, importToolsCsv } from "../db";
 
@@ -43,8 +44,9 @@ async function startServer() {
       const user = await getSessionUser(req);
       if (!user) return res.status(401).json({ ok: false, message: "Debes iniciar sesión para importar datos." });
       if (user.rol !== "Admin") return res.status(403).json({ ok: false, message: "Solo un Administrador puede importar archivos." });
-      if (!req.file) return res.status(400).json({ ok: false, message: "Adjunta un archivo CSV en el campo 'file'." });
-      const text = req.file.buffer.toString("utf8").replace(/^\uFEFF/, "");
+      if (!req.file) return res.status(400).json({ ok: false, message: "Adjunta un archivo CSV o Excel (.xlsx) en el campo 'file'." });
+      const isExcel = /\.xlsx?$/i.test(req.file.originalname) || /spreadsheet|excel/.test(req.file.mimetype);
+      const text = isExcel ? XLSX.utils.sheet_to_csv(XLSX.read(req.file.buffer, { type: "buffer", cellText: true, cellDates: false }).Sheets[XLSX.read(req.file.buffer, { type: "buffer" }).SheetNames[0]]) : req.file.buffer.toString("utf8").replace(/^\uFEFF/, "");
       const result = kind === "tools" ? await importToolsCsv(text) : await importPersonalCsv(text);
       return res.status(200).json({ ok: true, ...result });
     } catch (error) {

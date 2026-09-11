@@ -1,0 +1,29 @@
+function peruNow() { return Date.now() - 5 * 60 * 60 * 1000; }
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; cantidad?: number }) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const cantidad = input.cantidad ?? 1;
+  if (!Number.isInteger(cantidad) || cantidad < 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La cantidad debe ser un entero mayor que cero." });
+  return db.transaction(async (tx) => {
+    const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
+    const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
+    if (!tool || !tool.estadoActivo) throw new TRPCError({ code: "NOT_FOUND", message: "Herramienta no encontrada o fuera de servicio." });
+    if (cantidad > tool.stock) throw new TRPCError({ code: "BAD_REQUEST", message: `Stock insuficiente. Disponible: ${tool.stock}.` });
+    if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
+    await tx.update(catalogoHerramientas).set({ stock: tool.stock - cantidad }).where(eq(catalogoHerramientas.idTag, input.idTag));
+    await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: peruNow(), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, cantidadPrestada: cantidad, estado: "Prestada" });
+    return { success: true } as const;
+  });
+}
+export async function returnTransaction(idTag: string, userRecibe: number, movementId?: number) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  return db.transaction(async (tx) => {
+    const conditions = movementId ? eq(transacciones.id, movementId) : and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno));
+    const open = (await tx.select().from(transacciones).where(conditions).orderBy(desc(transacciones.fechaSalida)).limit(1))[0];
+    if (!open || open.fechaRetorno) throw new TRPCError({ code: "NOT_FOUND", message: "No existe un préstamo activo seleccionado." });
+    const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, open.idTag)).limit(1))[0];
+    if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta ya no existe." });
+    await tx.update(transacciones).set({ userRecibe, fechaRetorno: peruNow(), estado: "Devuelto" }).where(eq(transacciones.id, open.id));
+    await tx.update(catalogoHerramientas).set({ stock: tool.stock + (open.cantidadPrestada ?? 1), estadoActivo: 1 }).where(eq(catalogoHerramientas.idTag, open.idTag));
+    return { success: true, movementId: open.id } as const;
+  });
+}

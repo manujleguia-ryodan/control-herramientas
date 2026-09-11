@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { clearSession, createSession, setSession } from "./internalSession";
 import { verifyPin } from "./pinAuth";
-import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, importPersonalCsv, importToolsCsv, recordMovement, returnTransaction, searchTools } from "./db";
+import { createLocation, createMiningUnit, createPersonal, createStorekeeper, createTool, createToolRecord, createUser, createWorker, deactivatePersonal, deactivateTool, deleteToolSafely, deactivateUser, dispatchTransaction, getCatalogSnapshot, getCounts, getUserById, getUserCount, getUsers, importCsvCatalog, importPersonalCsv, importToolsCsv, recordMovement, returnTransaction, searchTools } from "./db";
 import { storagePut } from "./storage";
 
 const optionalText = z.string().max(500).optional();
@@ -48,8 +48,9 @@ export const appRouter = router({
     users: adminProcedure.query(() => getUsers()),
     createUser: adminProcedure.input(z.object({ nombre: z.string().trim().min(2).max(160), pin: pinSchema, rol: z.enum(["Admin", "Almacen"]).default("Almacen") })).mutation(({ input }) => createUser(input)),
     deactivateUser: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => deactivateUser(input.id)),
-    createToolRecord: adminProcedure.input(z.object({ idTag: z.string().trim().min(1).max(100), descripcion: z.string().trim().min(1).max(2000), marca: optionalText, ubicacion: z.string().trim().max(80).optional() })).mutation(({ input }) => createToolRecord(input)),
+    createToolRecord: adminProcedure.input(z.object({ idTag: z.string().trim().min(1).max(100), descripcion: z.string().trim().min(1).max(2000), marca: optionalText, ubicacion: z.string().trim().max(80).optional(), stock: z.number().int().positive().default(1) })).mutation(({ input }) => createToolRecord(input)),
     deactivateTool: adminProcedure.input(z.object({ idTag: z.string().min(1), motivoBaja: z.string().trim().min(3).max(2000) })).mutation(({ input }) => deactivateTool(input.idTag, input.motivoBaja)),
+    deleteToolSafely: adminProcedure.input(z.object({ idTag: z.string().min(1) })).mutation(({ input }) => deleteToolSafely(input.idTag)),
     createPersonal: adminProcedure.input(z.object({ codigoTrabajador: z.string().trim().min(1).max(80), nombreCompleto: z.string().trim().min(2).max(160), marcobre: optionalText, tipo: z.string().trim().min(1).max(40) })).mutation(({ input }) => createPersonal(input)),
     deactivatePersonal: adminProcedure.input(z.object({ codigoTrabajador: z.string().min(1) })).mutation(({ input }) => deactivatePersonal(input.codigoTrabajador)),
     createUnit: adminProcedure.input(z.object({ code: z.string(), name: z.string(), marcobre: optionalText, site: optionalText })).mutation(({ input }) => createMiningUnit(input)),
@@ -59,7 +60,7 @@ export const appRouter = router({
     createTool: adminProcedure.input(z.object({ code: z.string(), name: z.string(), brand: optionalText, notes: optionalText, category: optionalText, model: optionalText, serialNumber: optionalText, quantity: z.number().optional(), unitId: z.number().optional(), locationId: z.number().optional(), imageUrl: optionalText, imageKey: optionalText })).mutation(({ input }) => createTool(input)),
     uploadImage: protectedProcedure.input(z.object({ fileName: z.string(), contentType: z.string().regex(/^image\/(jpeg|png|webp|heic)$/), dataUrl: z.string().min(30) })).mutation(async ({ input, ctx }) => { const match = input.dataUrl.match(/^data:[^;]+;base64,(.+)$/); if (!match) throw new Error("Invalid image data"); return storagePut(`tools/${ctx.user.id}/${Date.now()}-${input.fileName.replace(/[^a-zA-Z0-9._-]/g, "-")}`, Buffer.from(match[1], "base64"), input.contentType); }),
   }),
-  movements: router({ create: protectedProcedure.input(movementSchema).mutation(({ input }) => recordMovement(input)), dispatch: protectedProcedure.input(z.object({ idTag: z.string(), codigoTrabajador: z.string(), userEntrega: z.number().int().positive() })).mutation(({ input }) => dispatchTransaction(input)), return: protectedProcedure.input(z.object({ idTag: z.string(), userRecibe: z.number().int().positive() })).mutation(({ input }) => returnTransaction(input.idTag, input.userRecibe)) }),
+  movements: router({ create: protectedProcedure.input(movementSchema).mutation(({ input }) => recordMovement(input)), dispatch: protectedProcedure.input(z.object({ idTag: z.string(), codigoTrabajador: z.string(), userEntrega: z.number().int().positive(), cantidad: z.number().int().positive().default(1) })).mutation(({ input }) => dispatchTransaction(input)), return: protectedProcedure.input(z.object({ idTag: z.string(), userRecibe: z.number().int().positive(), movementId: z.number().int().positive().optional() })).mutation(({ input }) => returnTransaction(input.idTag, input.userRecibe, input.movementId)) }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -16,6 +16,7 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
   ubicacion: varchar("Ubicacion", { length: 80 }),
   estadoActivo: int("Estado_Activo").default(1).notNull(),
   motivoBaja: text("Motivo_Baja"),
+  stock: int("Stock").default(1).notNull(),
 });
 
 export const catalogoPersonal = mysqlTable("catalogo_personal", {
@@ -33,6 +34,11 @@ export const transacciones = mysqlTable("transacciones", {
   fechaSalida: bigint("Fecha_Salida", { mode: "number" }).notNull(),
   userRecibe: int("User_Recibe"),
   fechaRetorno: bigint("Fecha_Retorno", { mode: "number" }),
+  descripcionHerramienta: text("Descripcion_Herramienta"),
+  nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
+  marcobreTrabajador: varchar("Marcobre_Trabajador", { length: 160 }),
+  cantidadPrestada: int("Cantidad_Prestada").default(1).notNull(),
+  estado: varchar("Estado", { length: 30 }).default("Prestada").notNull(),
 });
 
 /** Tipo de sesión interno. Se mantienen campos opcionales heredados para compatibilidad de compilación del shell. */
