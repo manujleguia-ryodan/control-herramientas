@@ -64,7 +64,7 @@ export async function getCatalogSnapshot() {
     db.select().from(transacciones).orderBy(desc(transacciones.fechaSalida)).limit(500),
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
   ]);
-  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, quantity: 1, availableQuantity: tool.estadoActivo ? 1 : 0, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, quantity: 1, availableQuantity: tool.estadoActivo ? 1 : 0, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, quantity: 1, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE")}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
@@ -80,9 +80,9 @@ export async function createStorekeeper(input: { code: string; fullName: string;
 export async function createWorker(input: { code: string; fullName: string; area?: string; marcobre?: string; unitId?: number }) { return createPersonal({ codigoTrabajador: input.code, nombreCompleto: input.fullName, marcobre: input.marcobre, tipo: input.area ?? "Almacen" }); }
 export async function createTool(input: { code: string; name: string; brand?: string; notes?: string }) { return createToolRecord({ idTag: input.code, descripcion: input.name, marca: input.brand, motivoBaja: input.notes }); }
 
-export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; estadoActivo?: number; motivoBaja?: string }) {
+export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; ubicacion?: string; estadoActivo?: number; motivoBaja?: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, estadoActivo: input.estadoActivo ?? 1, motivoBaja: input.motivoBaja });
+  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, ubicacion: input.ubicacion, estadoActivo: input.estadoActivo ?? 1, motivoBaja: input.motivoBaja });
   return { success: true } as const;
 }
 export async function deactivateTool(idTag: string, motivoBaja: string) {
@@ -131,7 +131,7 @@ function parseCsv(text: string, expected: string[]) {
   return rows.slice(1).map((values) => Object.fromEntries(expected.map((key, index) => [key, values[index] ?? ""])));
 }
 export async function importCsvCatalog(input: { herramientasCsv: string; personalCsv: string }): Promise<CsvImportResult> {
-  const herramientas = parseCsv(input.herramientasCsv, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo"]);
+  const herramientas = parseCsv(input.herramientasCsv, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion"]);
   const personal = parseCsv(input.personalCsv, ["Codigo_Trabajador", "Nombre_Completo", "Marcobre", "Tipo"]);
   const ids = new Set<string>(); for (const row of herramientas) { if (!row.ID_Tag || ids.has(row.ID_Tag)) throw new Error(`ID_Tag duplicado o vacío: ${row.ID_Tag}`); ids.add(row.ID_Tag); }
   const codes = new Set<string>(); for (const row of personal) { if (!row.Codigo_Trabajador || codes.has(row.Codigo_Trabajador)) throw new Error(`Codigo_Trabajador duplicado o vacío: ${row.Codigo_Trabajador}`); codes.add(row.Codigo_Trabajador); }
@@ -140,7 +140,7 @@ export async function importCsvCatalog(input: { herramientasCsv: string; persona
   for (const row of herramientas) if (existingTools.some((item) => item.idTag === row.ID_Tag)) throw new Error(`ID_Tag ya existe: ${row.ID_Tag}`);
   for (const row of personal) if (existingPeople.some((item) => item.codigoTrabajador === row.Codigo_Trabajador)) throw new Error(`Codigo_Trabajador ya existe: ${row.Codigo_Trabajador}`);
   await db.transaction(async (tx) => {
-    if (herramientas.length) await tx.insert(catalogoHerramientas).values(herramientas.map((row) => ({ idTag: row.ID_Tag, descripcion: row.Descripcion, marca: row.Marca || undefined, estadoActivo: row.Estado_Activo === "0" ? 0 : 1 })));
+    if (herramientas.length) await tx.insert(catalogoHerramientas).values(herramientas.map((row) => ({ idTag: row.ID_Tag, descripcion: row.Descripcion, marca: row.Marca || undefined, ubicacion: row.Ubicacion || undefined, estadoActivo: row.Estado_Activo === "0" ? 0 : 1 })));
     if (personal.length) await tx.insert(catalogoPersonal).values(personal.map((row) => ({ codigoTrabajador: row.Codigo_Trabajador, nombreCompleto: row.Nombre_Completo, marcobre: row.Marcobre || undefined, tipo: row.Tipo })));
   });
   return { herramientas: herramientas.length, personal: personal.length };

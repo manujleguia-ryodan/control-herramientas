@@ -1,0 +1,1 @@
+ALTER TABLE `catalogo_herramientas` ADD `Ubicacion` varchar(80);

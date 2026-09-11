@@ -13,6 +13,7 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
   idTag: varchar("ID_Tag", { length: 100 }).primaryKey(),
   descripcion: text("Descripcion").notNull(),
   marca: varchar("Marca", { length: 120 }),
+  ubicacion: varchar("Ubicacion", { length: 80 }),
   estadoActivo: int("Estado_Activo").default(1).notNull(),
   motivoBaja: text("Motivo_Baja"),
 });

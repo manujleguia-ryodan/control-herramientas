@@ -57,7 +57,7 @@ describe("catalog input validation", () => {
 
   it("requires the exact CSV headers for the hybrid import", async () => {
     await expect(caller().catalog.importCsv({
-      herramientasCsv: "ID_Tag,Descripcion,Marca,Estado_Activo\nT-01,Martillo,ACME,1",
+      herramientasCsv: "ID_Tag,Descripcion,Marca,Estado_Activo,Ubicacion\nT-01,Martillo,ACME,1,Estante A - Nivel 2",
       personalCsv: "Codigo_Trabajador,Nombre_Completo,Compañía,Tipo\nP-01,Persona,Marcobre,Marcobre",
     })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
