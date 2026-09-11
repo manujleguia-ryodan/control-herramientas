@@ -1,173 +1,146 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import {
-  InsertUser,
-  miningUnits,
-  movements,
-  storekeepers,
-  tools,
-  users,
-  warehouseLocations,
-  workers,
-} from "../drizzle/schema";
+import { catalogoHerramientas, catalogoPersonal, InsertUser, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { hashPin } from "./pinAuth";
 
 let _db: ReturnType<typeof drizzle> | null = null;
-
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
+    try { _db = drizzle(process.env.DATABASE_URL); } catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
 }
 
+/** Compatibilidad interna: el acceso nuevo no usa correo ni OAuth. */
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
   if (!db) return;
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  const textFields = ["name", "email", "loginMethod"] as const;
-  textFields.forEach((field) => {
-    if (user[field] !== undefined) {
-      values[field] = user[field] ?? null;
-      updateSet[field] = user[field] ?? null;
-    }
-  });
-  values.lastSignedIn = user.lastSignedIn ?? new Date();
-  updateSet.lastSignedIn = values.lastSignedIn;
-  if (user.role !== undefined || user.openId === ENV.ownerOpenId) {
-    values.role = user.role ?? "admin";
-    updateSet.role = values.role;
-  }
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(usuarios).values(user).onDuplicateKeyUpdate({ set: { nombre: user.nombre, pinHash: user.pinHash, rol: user.rol ?? "Almacen", estado: user.estado ?? 1 } });
 }
-
 export async function getUserByOpenId(openId: string) {
+  const id = Number(openId);
+  if (!Number.isInteger(id)) return undefined;
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result[0];
+  return (await db.select().from(usuarios).where(eq(usuarios.id, id)).limit(1))[0];
+}
+
+export async function getUsers() {
+  const db = await getDb();
+  return db ? db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre) : [];
+}
+export async function getUserCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ count: sql<number>`count(*)` }).from(usuarios);
+  return Number(rows[0]?.count ?? 0);
+}
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  return (await db.select().from(usuarios).where(eq(usuarios.id, id)).limit(1))[0];
+}
+export async function createUser(input: { nombre: string; pin: string; rol?: "Admin" | "Almacen" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(usuarios).values({ nombre: input.nombre.trim(), pinHash: hashPin(input.pin), rol: input.rol ?? "Almacen", estado: 1 });
+  return { success: true, id: Number(result[0].insertId) } as const;
+}
+export async function deactivateUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(usuarios).set({ estado: 0 }).where(eq(usuarios.id, id));
+  return { success: true } as const;
 }
 
 export async function getCatalogSnapshot() {
   const db = await getDb();
   if (!db) return { units: [], locations: [], storekeepers: [], workers: [], tools: [], movements: [], stats: emptyStats() };
-  const [units, locations, storekeepersRows, workersRows, toolsRows, movementRows] = await Promise.all([
-    db.select().from(miningUnits).orderBy(miningUnits.name),
-    db.select().from(warehouseLocations).orderBy(warehouseLocations.name),
-    db.select().from(storekeepers).orderBy(storekeepers.fullName),
-    db.select().from(workers).orderBy(workers.fullName),
-    db.select().from(tools).orderBy(tools.name),
-    db.select().from(movements).orderBy(desc(movements.occurredAt)).limit(500),
+  const [herramientas, personal, tx, userRows] = await Promise.all([
+    db.select().from(catalogoHerramientas).orderBy(catalogoHerramientas.descripcion),
+    db.select().from(catalogoPersonal).orderBy(catalogoPersonal.nombreCompleto),
+    db.select().from(transacciones).orderBy(desc(transacciones.fechaSalida)).limit(500),
+    db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
   ]);
-  const toolRotation = new Map<number, number>();
-  const openLoan = new Map<number, { workerId: number; storekeeperId: number; occurredAt: number }>();
-  for (const movement of [...movementRows].reverse()) {
-    if (movement.type === "dispatch") {
-      toolRotation.set(movement.toolId, (toolRotation.get(movement.toolId) ?? 0) + movement.quantity);
-      openLoan.set(movement.toolId, { workerId: movement.workerId, storekeeperId: movement.storekeeperId, occurredAt: movement.occurredAt });
-    } else if (movement.type === "return") {
-      openLoan.delete(movement.toolId);
-    }
-  }
-  const workerById = new Map(workersRows.map((row) => [row.id, row]));
-  const storekeeperById = new Map(storekeepersRows.map((row) => [row.id, row]));
-  const enrichedTools = toolsRows.map((tool) => {
-    const loan = openLoan.get(tool.id);
-    const worker = loan ? workerById.get(loan.workerId) : undefined;
-    const storekeeper = loan ? storekeeperById.get(loan.storekeeperId) : undefined;
-    return { ...tool, rotations: toolRotation.get(tool.id) ?? 0, holder: worker?.fullName ?? null, holderCode: worker?.code ?? null, loanStorekeeper: storekeeper?.fullName ?? null, daysOut: loan ? Math.max(0, Math.floor((Date.now() - loan.occurredAt) / 86_400_000)) : 0 };
-  });
-  const stats = {
-    totalStock: toolsRows.reduce((sum, tool) => sum + tool.quantity, 0),
-    totalAvailable: toolsRows.reduce((sum, tool) => sum + tool.availableQuantity, 0),
-    borrowed: toolsRows.reduce((sum, tool) => sum + (tool.quantity - tool.availableQuantity), 0),
-    overdue: enrichedTools.filter((tool) => tool.daysOut >= 7).length,
-    totalTools: toolsRows.length,
-    totalMovements: movementRows.length,
-  };
-  return { units, locations, storekeepers: storekeepersRows, workers: workersRows, tools: enrichedTools, movements: movementRows, stats };
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, quantity: 1, availableQuantity: tool.estadoActivo ? 1 : 0, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: tool.motivoBaja }));
+  const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, company: row.empresa, area: row.tipo, unitId: null }));
+  const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, quantity: 1, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE")}` : null }));
+  const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
+  return { units: [], locations: [], storekeepers, workers, tools, movements, stats: { ...emptyStats(), totalStock: tools.length, totalAvailable: tools.filter((tool) => tool.availableQuantity > 0).length, totalTools: tools.length, totalMovements: movements.length } };
 }
-
 export function emptyStats() { return { totalStock: 0, totalAvailable: 0, borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
+export async function getCounts() { const snapshot = await getCatalogSnapshot(); return snapshot.stats; }
 
-export async function createMiningUnit(input: { code: string; name: string; company?: string; site?: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(miningUnits).values(input);
+// Compatibilidad de formularios heredados: estos catálogos ya no crean unidades/ubicaciones.
+export async function createMiningUnit(_input: { code: string; name: string; company?: string; site?: string }) { return { success: true } as const; }
+export async function createLocation(_input: { code: string; name: string; zone?: string; description?: string; unitId?: number; photoUrl?: string; photoKey?: string }) { return { success: true } as const; }
+export async function createStorekeeper(input: { code: string; fullName: string; employeeId?: string; phone?: string; password?: string }) { return createUser({ nombre: input.fullName, pin: input.password ?? "0000" }); }
+export async function createWorker(input: { code: string; fullName: string; area?: string; company?: string; unitId?: number }) { return createPersonal({ codigoTrabajador: input.code, nombreCompleto: input.fullName, empresa: input.company, tipo: input.area ?? "Almacen" }); }
+export async function createTool(input: { code: string; name: string; brand?: string; notes?: string }) { return createToolRecord({ idTag: input.code, descripcion: input.name, marca: input.brand, motivoBaja: input.notes }); }
+
+export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; estadoActivo?: number; motivoBaja?: string }) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, estadoActivo: input.estadoActivo ?? 1, motivoBaja: input.motivoBaja });
   return { success: true } as const;
 }
-export async function createLocation(input: { code: string; name: string; zone?: string; description?: string; unitId?: number; photoUrl?: string; photoKey?: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(warehouseLocations).values(input);
+export async function deactivateTool(idTag: string, motivoBaja: string) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  await db.update(catalogoHerramientas).set({ estadoActivo: 0, motivoBaja: motivoBaja.trim() }).where(eq(catalogoHerramientas.idTag, idTag));
   return { success: true } as const;
 }
-export async function createStorekeeper(input: { code: string; fullName: string; employeeId?: string; phone?: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(storekeepers).values(input);
+export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; empresa?: string; tipo: string }) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  await db.insert(catalogoPersonal).values({ codigoTrabajador: input.codigoTrabajador.trim(), nombreCompleto: input.nombreCompleto.trim(), empresa: input.empresa, tipo: input.tipo.trim() });
   return { success: true } as const;
 }
-export async function createWorker(input: { code: string; fullName: string; area?: string; company?: string; unitId?: number }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(workers).values(input);
-  return { success: true } as const;
-}
-export async function createTool(input: { code: string; name: string; category?: string; brand?: string; model?: string; serialNumber?: string; quantity?: number; unitId?: number; locationId?: number; imageUrl?: string; imageKey?: string; notes?: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const quantity = Math.max(1, input.quantity ?? 1);
-  await db.insert(tools).values({ ...input, quantity, availableQuantity: quantity });
+export async function deactivatePersonal(codigoTrabajador: string) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  await db.delete(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, codigoTrabajador));
   return { success: true } as const;
 }
 
-export async function recordMovement(input: { toolId: number; workerId: number; storekeeperId: number; type: "dispatch" | "return" | "transfer"; quantity: number; unitId?: number; destination?: string; condition?: string; note?: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const tool = (await db.select().from(tools).where(eq(tools.id, input.toolId)).limit(1))[0];
-  if (!tool) throw new Error("Tool not found");
-  if (input.quantity < 1) throw new Error("Quantity must be positive");
-  const nextAvailable = input.type === "dispatch" ? tool.availableQuantity - input.quantity : input.type === "return" ? tool.availableQuantity + input.quantity : tool.availableQuantity;
-  if (nextAvailable < 0) throw new Error("Not enough available quantity");
-  if (nextAvailable > tool.quantity) throw new Error("Returned quantity exceeds stock");
-  const nextStatus = input.type === "dispatch" && nextAvailable === 0 ? "borrowed" : input.type === "return" ? "available" : tool.status;
+export async function recordMovement(input: { toolId: number; workerId: number; storekeeperId: number; type: "dispatch" | "return" | "transfer"; quantity: number; note?: string; destination?: string; condition?: string }) {
+  const snapshot = await getCatalogSnapshot();
+  const tool = snapshot.tools.find((row) => row.id === input.toolId);
+  const worker = snapshot.workers.find((row) => row.id === input.workerId);
+  if (!tool || !worker) throw new Error("Tool or worker not found");
+  if (input.type === "return") return returnTransaction(tool.code, input.storekeeperId);
+  return dispatchTransaction({ idTag: tool.code, codigoTrabajador: worker.code, userEntrega: input.storekeeperId });
+}
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number }) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  await db.insert(transacciones).values({ idTag: input.idTag, codigoTrabajador: input.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: Date.now() });
+  return { success: true } as const;
+}
+export async function returnTransaction(idTag: string, userRecibe: number) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const open = (await db.select().from(transacciones).where(eq(transacciones.idTag, idTag)).orderBy(desc(transacciones.fechaSalida)).limit(1))[0];
+  if (!open) throw new Error("No active transaction found");
+  await db.update(transacciones).set({ userRecibe, fechaRetorno: Date.now() }).where(eq(transacciones.id, open.id));
+  return { success: true } as const;
+}
+
+export type CsvImportResult = { herramientas: number; personal: number };
+function parseCsv(text: string, expected: string[]) {
+  const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
+  for (let i = 0; i < text.length; i++) { const char = text[i]; const next = text[i + 1]; if (char === '"' && quoted && next === '"') { cell += '"'; i++; } else if (char === '"') quoted = !quoted; else if (char === "," && !quoted) { row.push(cell); cell = ""; } else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && next === "\n") i++; row.push(cell); if (row.some((value) => value.trim() !== "")) rows.push(row.map((value) => value.trim())); row = []; cell = ""; } else cell += char; }
+  if (cell || row.length) { row.push(cell); rows.push(row.map((value) => value.trim())); }
+  if (!rows.length || rows[0].join(",") !== expected.join(",")) throw new Error(`Encabezados inválidos. Se esperaba: ${expected.join(",")}`);
+  return rows.slice(1).map((values) => Object.fromEntries(expected.map((key, index) => [key, values[index] ?? ""])));
+}
+export async function importCsvCatalog(input: { herramientasCsv: string; personalCsv: string }): Promise<CsvImportResult> {
+  const herramientas = parseCsv(input.herramientasCsv, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Motivo_Baja"]);
+  const personal = parseCsv(input.personalCsv, ["Codigo_Trabajador", "Nombre_Completo", "Empresa", "Tipo"]);
+  const ids = new Set<string>(); for (const row of herramientas) { if (!row.ID_Tag || ids.has(row.ID_Tag)) throw new Error(`ID_Tag duplicado o vacío: ${row.ID_Tag}`); ids.add(row.ID_Tag); }
+  const codes = new Set<string>(); for (const row of personal) { if (!row.Codigo_Trabajador || codes.has(row.Codigo_Trabajador)) throw new Error(`Codigo_Trabajador duplicado o vacío: ${row.Codigo_Trabajador}`); codes.add(row.Codigo_Trabajador); }
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const [existingTools, existingPeople] = await Promise.all([db.select({ idTag: catalogoHerramientas.idTag }).from(catalogoHerramientas), db.select({ codigoTrabajador: catalogoPersonal.codigoTrabajador }).from(catalogoPersonal)]);
+  for (const row of herramientas) if (existingTools.some((item) => item.idTag === row.ID_Tag)) throw new Error(`ID_Tag ya existe: ${row.ID_Tag}`);
+  for (const row of personal) if (existingPeople.some((item) => item.codigoTrabajador === row.Codigo_Trabajador)) throw new Error(`Codigo_Trabajador ya existe: ${row.Codigo_Trabajador}`);
   await db.transaction(async (tx) => {
-    await tx.insert(movements).values({ ...input, occurredAt: Date.now(), unitId: input.unitId ?? tool.unitId ?? undefined });
-    await tx.update(tools).set({ availableQuantity: nextAvailable, status: nextStatus }).where(eq(tools.id, input.toolId));
+    if (herramientas.length) await tx.insert(catalogoHerramientas).values(herramientas.map((row) => ({ idTag: row.ID_Tag, descripcion: row.Descripcion, marca: row.Marca || undefined, estadoActivo: row.Estado_Activo === "0" ? 0 : 1, motivoBaja: row.Motivo_Baja || undefined })));
+    if (personal.length) await tx.insert(catalogoPersonal).values(personal.map((row) => ({ codigoTrabajador: row.Codigo_Trabajador, nombreCompleto: row.Nombre_Completo, empresa: row.Empresa || undefined, tipo: row.Tipo })));
   });
-  return { success: true } as const;
-}
-
-export async function importCatalog(input: { units: Array<{ code: string; name: string; company?: string; site?: string }>; locations: Array<{ code: string; name: string; zone?: string; description?: string; unitCode?: string; photoUrl?: string }>; storekeepers: Array<{ code: string; fullName: string; employeeId?: string; phone?: string }>; workers: Array<{ code: string; fullName: string; area?: string; company?: string; unitCode?: string }>; tools: Array<{ code: string; name: string; category?: string; brand?: string; model?: string; serialNumber?: string; quantity?: number; unitCode?: string; locationCode?: string; imageUrl?: string; notes?: string }> }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  return db.transaction(async (tx) => {
-    for (const row of input.units) if (row.code && row.name) await tx.insert(miningUnits).values({ code: row.code.trim(), name: row.name.trim(), company: row.company, site: row.site }).onDuplicateKeyUpdate({ set: { name: row.name.trim(), company: row.company, site: row.site } });
-    const units = await tx.select().from(miningUnits);
-    const unitIdByCode = new Map(units.map((unit) => [unit.code, unit.id]));
-    for (const row of input.locations) if (row.code && row.name) await tx.insert(warehouseLocations).values({ code: row.code.trim(), name: row.name.trim(), zone: row.zone, description: row.description, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, photoUrl: row.photoUrl }).onDuplicateKeyUpdate({ set: { name: row.name.trim(), zone: row.zone, description: row.description, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, photoUrl: row.photoUrl } });
-    for (const row of input.storekeepers) if (row.code && row.fullName) await tx.insert(storekeepers).values({ code: row.code.trim(), fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone }).onDuplicateKeyUpdate({ set: { fullName: row.fullName.trim(), employeeId: row.employeeId, phone: row.phone } });
-    for (const row of input.workers) if (row.code && row.fullName) await tx.insert(workers).values({ code: row.code.trim(), fullName: row.fullName.trim(), area: row.area, company: row.company, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined }).onDuplicateKeyUpdate({ set: { fullName: row.fullName.trim(), area: row.area, company: row.company, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined } });
-    const locations = await tx.select().from(warehouseLocations);
-    const locationIdByCode = new Map(locations.map((location) => [location.code, location.id]));
-    for (const row of input.tools) if (row.code && row.name) { const quantity = Math.max(1, Number(row.quantity ?? 1)); await tx.insert(tools).values({ code: row.code.trim(), name: row.name.trim(), category: row.category, brand: row.brand, model: row.model, serialNumber: row.serialNumber, quantity, availableQuantity: quantity, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, locationId: row.locationCode ? locationIdByCode.get(row.locationCode) : undefined, imageUrl: row.imageUrl, notes: row.notes }).onDuplicateKeyUpdate({ set: { name: row.name.trim(), category: row.category, brand: row.brand, model: row.model, serialNumber: row.serialNumber, quantity, availableQuantity: quantity, unitId: row.unitCode ? unitIdByCode.get(row.unitCode) : undefined, locationId: row.locationCode ? locationIdByCode.get(row.locationCode) : undefined, imageUrl: row.imageUrl, notes: row.notes } }); }
-    return { success: true } as const;
-  });
-}
-
-export async function getCounts() {
-  const db = await getDb();
-  if (!db) return emptyStats();
-  const [toolCount, unitCount, workerCount, storekeeperCount] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(tools), db.select({ count: sql<number>`count(*)` }).from(miningUnits), db.select({ count: sql<number>`count(*)` }).from(workers), db.select({ count: sql<number>`count(*)` }).from(storekeepers),
-  ]);
-  return { ...emptyStats(), totalTools: Number(toolCount[0]?.count ?? 0), units: Number(unitCount[0]?.count ?? 0), workers: Number(workerCount[0]?.count ?? 0), storekeepers: Number(storekeeperCount[0]?.count ?? 0) };
+  return { herramientas: herramientas.length, personal: personal.length };
 }
