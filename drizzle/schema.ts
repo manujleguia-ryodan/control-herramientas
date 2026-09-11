@@ -43,8 +43,6 @@ export const storekeepers = mysqlTable("storekeepers", {
   fullName: varchar("fullName", { length: 160 }).notNull(),
   employeeId: varchar("employeeId", { length: 80 }),
   phone: varchar("phone", { length: 50 }),
-  passwordHash: text("passwordHash"),
-  role: mysqlEnum("role", ["admin", "operator"]).default("operator").notNull(),
   active: int("active").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

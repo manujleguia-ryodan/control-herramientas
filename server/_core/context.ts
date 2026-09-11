@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { getInternalSession } from "../internalAuth";
+import { sdk } from "./sdk";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -8,19 +8,21 @@ export type TrpcContext = {
   user: User | null;
 };
 
-export async function createContext(opts: CreateExpressContextOptions): Promise<TrpcContext> {
-  const session = await getInternalSession(opts.req);
-  const now = new Date();
-  const user: User | null = session ? {
-    id: session.storekeeperId,
-    openId: `storekeeper:${session.code}`,
-    name: session.name,
-    email: null,
-    loginMethod: "internal-code",
-    role: session.role === "admin" ? "admin" : "user",
-    createdAt: now,
-    updatedAt: now,
-    lastSignedIn: now,
-  } : null;
-  return { req: opts.req, res: opts.res, user };
+export async function createContext(
+  opts: CreateExpressContextOptions
+): Promise<TrpcContext> {
+  let user: User | null = null;
+
+  try {
+    user = await sdk.authenticateRequest(opts.req);
+  } catch (error) {
+    // Authentication is optional for public procedures.
+    user = null;
+  }
+
+  return {
+    req: opts.req,
+    res: opts.res,
+    user,
+  };
 }
