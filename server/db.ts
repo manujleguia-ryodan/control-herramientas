@@ -216,13 +216,9 @@ export async function createRetirementXlsx(idTag: string) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(template);
   const ws = workbook.worksheets[0];
-  const logoPath = path.join(process.cwd(), "server", "templates", "logo-marcobre.png");
-  try {
-    const logoId = workbook.addImage({ filename: logoPath, extension: "png" });
-    ws.addImage(logoId, { tl: { col: 7, row: 0 }, ext: { width: 245, height: 48 } });
-  } catch {}
   const dateText = date.toLocaleString("es-PE", { timeZone: "America/Lima" });
   const put = (cell: string, value: string) => { ws.getCell(cell).value = value; };
+  // Mantener el formato recibido: solo se completan los campos vacíos de la plantilla.
   put("C4", `FECHA DE ELABORACIÓN : ${dateText}`);
   put("C5", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`);
   put("C6", user?.nombre ?? `Usuario #${retirement.usuarioBaja}`);
@@ -234,26 +230,23 @@ export async function createRetirementXlsx(idTag: string) {
   put("C13", "");
   put("C14", tool.idTag);
   put("C15", `Ubicación: ${tool.ubicacion ?? "No registrada"}`);
-  // La plantilla trae la descripción como un bloque combinado; se divide para reservar espacio a las evidencias.
-  try { ws.unMergeCells("A17:I30"); } catch {}
-  ws.mergeCells("A17:I19");
-  put("A16", "2.DESCRIPCIÓN DEL EVENTO Y EVIDENCIAS FOTOGRÁFICAS :");
-  put("A17", retirement.motivo);
 
   const photoNames = (await fs.readdir(baseDir)).filter((name) => /\.(jpe?g|png)$/i.test(name)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).slice(0, 5);
-  if (photoNames.length) {
-    put("E16", "EVIDENCIAS");
-    for (let index = 0; index < photoNames.length; index++) {
-      const photoName = photoNames[index];
-      const photoPath = path.join(baseDir, photoName);
-      const extension = /\.png$/i.test(photoName) ? "png" : "jpeg";
-      const imageId = workbook.addImage({ filename: photoPath, extension });
-      const col = index % 2 === 0 ? 1 : 5;
-      const row = 20 + Math.floor(index / 2) * 8;
-      ws.addImage(imageId, { tl: { col, row }, ext: { width: 190, height: 112 } });
-      const captionCell = index % 2 === 0 ? `B${row + 6}` : `F${row + 6}`;
-      put(captionCell, `Evidencia ${index + 1} – Estado de la herramienta al momento de la baja.`);
-    }
+  // En el formato recibido, la descripción queda en el bloque izquierdo y las fotos al lado derecho.
+  try { ws.unMergeCells("A17:I30"); } catch {}
+  ws.mergeCells("A17:D30");
+  ws.mergeCells("E17:I30");
+  put("A16", "2.DESCRIPCIÓN DEL EVENTO :");
+  put("A17", retirement.motivo); // texto exacto ingresado en el modal de baja
+  put("E16", photoNames.length ? "EVIDENCIAS FOTOGRÁFICAS" : "");
+  for (let index = 0; index < photoNames.length; index++) {
+    const photoName = photoNames[index];
+    const photoPath = path.join(baseDir, photoName);
+    const extension = /\.png$/i.test(photoName) ? "png" : "jpeg";
+    const imageId = workbook.addImage({ filename: photoPath, extension });
+    const col = index % 2 === 0 ? 4 : 6;
+    const row = 16 + Math.floor(index / 2) * 7;
+    ws.addImage(imageId, { tl: { col, row }, ext: { width: 125, height: 82 } });
   }
   await workbook.xlsx.writeFile(xlsxPath);
   return { xlsxPath, xlsxNombre, tool: idTag };
