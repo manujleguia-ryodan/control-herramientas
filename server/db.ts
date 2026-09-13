@@ -157,6 +157,9 @@ export async function createRetirementReport(input: RetirementReportInput, persi
     const doc = new PDFDocument({ size: "A4", margin: 48 });
     const out = createWriteStream(pdfPath);
     doc.pipe(out);
+    const logoPath = path.join(process.cwd(), "server", "templates", "logo-marcobre.png");
+    try { doc.image(logoPath, 48, 38, { fit: [170, 34] }); } catch {}
+    doc.y = 88;
     doc.fontSize(16).font("Helvetica-Bold").text("REPORTE DE HERRAMIENTA FUERA DE SERVICIO", { align: "center" });
     doc.moveDown(1.5).fontSize(10).font("Helvetica");
     const lines = [
@@ -170,8 +173,11 @@ export async function createRetirementReport(input: RetirementReportInput, persi
     if (photoPaths.length) {
       doc.moveDown(.8).font("Helvetica-Bold").text("Evidencias fotográficas").moveDown(.5);
       let x = 48; let y = doc.y;
+      let evidenceIndex = 0;
       for (const photoPath of photoPaths) {
-        try { doc.image(photoPath, x, y, { fit: [235, 155], align: "center", valign: "center" }); } catch {}
+        evidenceIndex += 1;
+        try { doc.image(photoPath, x, y, { fit: [235, 135], align: "center", valign: "center" }); } catch {}
+        doc.font("Helvetica").fontSize(8).text(`Evidencia ${evidenceIndex} – Estado de la herramienta al momento de la baja.`, x, y + 140, { width: 235, align: "center" });
         x += 250;
         if (x > 300) { x = 48; y += 175; if (y > 650) { doc.addPage(); y = 48; } }
       }
@@ -210,6 +216,11 @@ export async function createRetirementXlsx(idTag: string) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(template);
   const ws = workbook.worksheets[0];
+  const logoPath = path.join(process.cwd(), "server", "templates", "logo-marcobre.png");
+  try {
+    const logoId = workbook.addImage({ filename: logoPath, extension: "png" });
+    ws.addImage(logoId, { tl: { col: 7, row: 0 }, ext: { width: 245, height: 48 } });
+  } catch {}
   const dateText = date.toLocaleString("es-PE", { timeZone: "America/Lima" });
   const put = (cell: string, value: string) => { ws.getCell(cell).value = value; };
   put("C4", `FECHA DE ELABORACIÓN : ${dateText}`);
@@ -223,6 +234,9 @@ export async function createRetirementXlsx(idTag: string) {
   put("C13", "");
   put("C14", tool.idTag);
   put("C15", `Ubicación: ${tool.ubicacion ?? "No registrada"}`);
+  // La plantilla trae la descripción como un bloque combinado; se divide para reservar espacio a las evidencias.
+  try { ws.unMergeCells("A17:I30"); } catch {}
+  ws.mergeCells("A17:I19");
   put("A16", "2.DESCRIPCIÓN DEL EVENTO Y EVIDENCIAS FOTOGRÁFICAS :");
   put("A17", retirement.motivo);
 
@@ -234,9 +248,11 @@ export async function createRetirementXlsx(idTag: string) {
       const photoPath = path.join(baseDir, photoName);
       const extension = /\.png$/i.test(photoName) ? "png" : "jpeg";
       const imageId = workbook.addImage({ filename: photoPath, extension });
-      const col = index % 2 === 0 ? 4 : 6;
-      const row = 16 + Math.floor(index / 2) * 8;
-      ws.addImage(imageId, { tl: { col, row }, ext: { width: 210, height: 132 } });
+      const col = index % 2 === 0 ? 1 : 5;
+      const row = 20 + Math.floor(index / 2) * 8;
+      ws.addImage(imageId, { tl: { col, row }, ext: { width: 190, height: 112 } });
+      const captionCell = index % 2 === 0 ? `B${row + 6}` : `F${row + 6}`;
+      put(captionCell, `Evidencia ${index + 1} – Estado de la herramienta al momento de la baja.`);
     }
   }
   await workbook.xlsx.writeFile(xlsxPath);
