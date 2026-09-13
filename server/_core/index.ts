@@ -11,7 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { getSessionUser } from "../internalSession";
-import { createRetirementReport, importPersonalCsv, importToolsCsv } from "../db";
+import { createRetirementReport, importPersonalCsv, importToolsCsv, regenerateRetirementReport } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -55,6 +55,20 @@ async function startServer() {
       return res.status(status).json({ ok: false, message });
     }
   }];
+  app.get("/api/retirements/report/:idTag", async (req: express.Request, res: express.Response) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, message: "Debes iniciar sesión." });
+      const format = String(req.query.format ?? "pdf").toLowerCase() === "xlsx" ? "xlsx" : "pdf";
+      const result = await regenerateRetirementReport(decodeURIComponent(String(req.params.idTag)), format);
+      if ("xlsxPath" in result) return res.download(result.xlsxPath, result.xlsxNombre);
+      return res.download(result.pdfPath, result.pdfNombre);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo regenerar el reporte.";
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      return res.status(code === "NOT_FOUND" ? 404 : 400).json({ ok: false, message });
+    }
+  });
   app.post("/api/retirements/report", upload.array("photos", 5), async (req: express.Request, res: express.Response) => {
     try {
       const user = await getSessionUser(req);

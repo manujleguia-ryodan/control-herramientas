@@ -8,6 +8,7 @@ import fs from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import path from "node:path";
 import PDFDocument from "pdfkit";
+import * as XLSX from "xlsx";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -82,7 +83,7 @@ export async function getCatalogSnapshot() {
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
     db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)),
   ]);
-  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null }));
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null, reportPdfName: bajas.find((item) => item.idTag === tool.idTag)?.pdfNombre ?? null }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
@@ -128,7 +129,7 @@ export type RetirementReportInput = { idTag: string; motivo: string; fechaIncide
 
 function safeFilePart(value: string) { return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80); }
 
-export async function createRetirementReport(input: RetirementReportInput) {
+export async function createRetirementReport(input: RetirementReportInput, persist = true) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
   const tool = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
@@ -176,11 +177,60 @@ export async function createRetirementReport(input: RetirementReportInput) {
     }
     doc.end(); out.on("finish", () => resolve()); out.on("error", reject);
   });
-  await db.transaction(async (tx) => {
-    await tx.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, input.idTag));
-    await tx.insert(bajasHerramientas).values({ idTag: input.idTag, motivo: input.motivo.trim(), fechaIncidente: now, trabajadorResponsable: supervisor.nombreCompleto, usuarioBaja: input.usuarioBaja, supervisorCodigo: supervisor.codigoTrabajador, pdfNombre });
-  });
+  if (persist) {
+    await db.transaction(async (tx) => {
+      await tx.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, input.idTag));
+      await tx.insert(bajasHerramientas).values({ idTag: input.idTag, motivo: input.motivo.trim(), fechaIncidente: now, trabajadorResponsable: supervisor.nombreCompleto, usuarioBaja: input.usuarioBaja, supervisorCodigo: supervisor.codigoTrabajador, pdfNombre });
+    });
+  }
   return { pdfPath, pdfNombre, tool: input.idTag };
+}
+
+async function getLatestRetirement(idTag: string) {
+  const db = await getDb();
+  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  const tool = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, idTag)).limit(1))[0];
+  const retirement = (await db.select().from(bajasHerramientas).where(eq(bajasHerramientas.idTag, idTag)).orderBy(desc(bajasHerramientas.fechaIncidente)).limit(1))[0];
+  if (!tool || !retirement) throw new TRPCError({ code: "NOT_FOUND", message: "No existe un reporte de baja para esta herramienta." });
+  const supervisor = (retirement.supervisorCodigo ? (await db.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, retirement.supervisorCodigo)).limit(1))[0] : undefined) ?? { nombreCompleto: retirement.trabajadorResponsable, codigoTrabajador: "-" };
+  const user = (await db.select().from(usuarios).where(eq(usuarios.id, retirement.usuarioBaja)).limit(1))[0];
+  return { db, tool, retirement, supervisor, user };
+}
+
+export async function createRetirementXlsx(idTag: string) {
+  const { tool, retirement, supervisor, user } = await getLatestRetirement(idTag);
+  const template = path.join(process.cwd(), "server", "templates", "formato-herramienta-danada.xlsx");
+  const baseDir = path.join(process.cwd(), "storage", "bajas", safeFilePart(idTag));
+  await fs.mkdir(baseDir, { recursive: true });
+  const date = new Date(retirement.fechaIncidente);
+  const datePart = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const xlsxNombre = `Reporte_FS_${safeFilePart(idTag)}_${datePart}.xlsx`;
+  const xlsxPath = path.join(baseDir, xlsxNombre);
+  const workbook = XLSX.read(await fs.readFile(template), { type: "buffer", cellStyles: true });
+  const ws = workbook.Sheets[workbook.SheetNames[0]];
+  const put = (cell: string, value: string) => { ws[cell] = { t: "s", v: value }; };
+  const dateText = date.toLocaleString("es-PE", { timeZone: "America/Lima" });
+  put("C4", `FECHA DE ELABORACIÓN : ${dateText}`);
+  put("C5", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`);
+  put("C6", user?.nombre ?? `Usuario #${retirement.usuarioBaja}`);
+  put("C7", "HERRAMIENTA DAÑADA / INOPERATIVA");
+  put("C8", dateText);
+  put("C10", tool.descripcion);
+  put("C11", tool.marca ?? "");
+  put("C12", "");
+  put("C13", "");
+  put("C14", tool.idTag);
+  put("C15", `Ubicación: ${tool.ubicacion ?? "No registrada"}`);
+  put("A17", retirement.motivo);
+  const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  await fs.writeFile(xlsxPath, output);
+  return { xlsxPath, xlsxNombre, tool: idTag };
+}
+
+export async function regenerateRetirementReport(idTag: string, format: "pdf" | "xlsx") {
+  const { retirement, supervisor, user } = await getLatestRetirement(idTag);
+  if (format === "xlsx") return createRetirementXlsx(idTag);
+  return createRetirementReport({ idTag, motivo: retirement.motivo, fechaIncidente: retirement.fechaIncidente, supervisorCodigo: supervisor.codigoTrabajador, usuarioBaja: retirement.usuarioBaja, photos: [] }, false);
 }
 
 export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; marcobre?: string; tipo: string }) {
