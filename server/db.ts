@@ -163,7 +163,7 @@ export async function createRetirementReport(input: RetirementReportInput, persi
     doc.fontSize(16).font("Helvetica-Bold").text("REPORTE DE HERRAMIENTA FUERA DE SERVICIO", { align: "center" });
     doc.moveDown(1.5).fontSize(10).font("Helvetica");
     const lines = [
-      ["Herramienta", tool.descripcion], ["Código", tool.idTag],
+      ["Herramienta", tool.descripcion], ["Código Tag", tool.idTag], ["Marca", tool.marca ?? "No registrada"], ["Ubicación", tool.ubicacion ?? "No registrada"],
       ["Fecha/Hora", new Date(now).toLocaleString("es-PE", { timeZone: "America/Lima" })],
       ["Almacenero Responsable", user?.nombre ?? `Usuario #${input.usuarioBaja}`],
       ["Supervisor Responsable", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`],
