@@ -167,19 +167,20 @@ export async function createRetirementReport(input: RetirementReportInput, persi
       ["Fecha/Hora", new Date(now).toLocaleString("es-PE", { timeZone: "America/Lima" })],
       ["Almacenero Responsable", user?.nombre ?? `Usuario #${input.usuarioBaja}`],
       ["Supervisor Responsable", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`],
-      ["Descripción del Evento", input.motivo.trim()],
     ];
     for (const [label, value] of lines) { doc.font("Helvetica-Bold").text(`${label}:`, { continued: true }); doc.font("Helvetica").text(` ${value}`); doc.moveDown(.45); }
+    doc.moveDown(.4).font("Helvetica-Bold").fontSize(11).text("Descripción del Evento", { align: "center" });
+    doc.moveDown(.25).font("Helvetica").fontSize(10).text(input.motivo.trim(), { align: "center", width: 500 });
     if (photoPaths.length) {
       doc.moveDown(.8).font("Helvetica-Bold").text("Evidencias fotográficas").moveDown(.5);
-      let x = 48; let y = doc.y;
+      let y = doc.y;
       let evidenceIndex = 0;
       for (const photoPath of photoPaths) {
         evidenceIndex += 1;
+        const x = photoPaths.length === 1 ? 180 : (evidenceIndex % 2 === 1 ? 48 : 312);
         try { doc.image(photoPath, x, y, { fit: [235, 135], align: "center", valign: "center" }); } catch {}
         doc.font("Helvetica").fontSize(8).text(`Evidencia ${evidenceIndex} – Estado de la herramienta al momento de la baja.`, x, y + 140, { width: 235, align: "center" });
-        x += 250;
-        if (x > 300) { x = 48; y += 175; if (y > 650) { doc.addPage(); y = 48; } }
+        if (photoPaths.length === 1 || evidenceIndex % 2 === 0) { y += 175; if (y > 650 && evidenceIndex < photoPaths.length) { doc.addPage(); y = 48; } }
       }
     }
     doc.end(); out.on("finish", () => resolve()); out.on("error", reject);
@@ -238,15 +239,19 @@ export async function createRetirementXlsx(idTag: string) {
   ws.mergeCells("E17:I30");
   put("A16", "2.DESCRIPCIÓN DEL EVENTO :");
   put("A17", retirement.motivo); // texto exacto ingresado en el modal de baja
+  ws.getCell("A17").alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  ws.getCell("A17").font = { name: "Arial", size: 11, bold: true, color: { argb: "FF1F2937" } };
+  ws.getCell("A16").alignment = { horizontal: "center", vertical: "middle" };
   put("E16", photoNames.length ? "EVIDENCIAS FOTOGRÁFICAS" : "");
+  ws.getCell("E16").alignment = { horizontal: "center", vertical: "middle" };
   for (let index = 0; index < photoNames.length; index++) {
     const photoName = photoNames[index];
     const photoPath = path.join(baseDir, photoName);
     const extension = /\.png$/i.test(photoName) ? "png" : "jpeg";
     const imageId = workbook.addImage({ filename: photoPath, extension });
-    const col = index % 2 === 0 ? 4 : 6;
-    const row = 16 + Math.floor(index / 2) * 7;
-    ws.addImage(imageId, { tl: { col, row }, ext: { width: 125, height: 82 } });
+    // E:I es el bloque derecho de la plantilla; cada foto se centra y se apila para no desplazarla.
+    const row = 17 + index * 5;
+    ws.addImage(imageId, { tl: { col: 5.15, row }, ext: { width: 165, height: 88 } });
   }
   await workbook.xlsx.writeFile(xlsxPath);
   return { xlsxPath, xlsxNombre, tool: idTag };
