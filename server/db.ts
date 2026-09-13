@@ -9,6 +9,7 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -206,10 +207,11 @@ export async function createRetirementXlsx(idTag: string) {
   const datePart = date.toISOString().slice(0, 10).replace(/-/g, "");
   const xlsxNombre = `Reporte_FS_${safeFilePart(idTag)}_${datePart}.xlsx`;
   const xlsxPath = path.join(baseDir, xlsxNombre);
-  const workbook = XLSX.read(await fs.readFile(template), { type: "buffer", cellStyles: true });
-  const ws = workbook.Sheets[workbook.SheetNames[0]];
-  const put = (cell: string, value: string) => { ws[cell] = { t: "s", v: value }; };
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(template);
+  const ws = workbook.worksheets[0];
   const dateText = date.toLocaleString("es-PE", { timeZone: "America/Lima" });
+  const put = (cell: string, value: string) => { ws.getCell(cell).value = value; };
   put("C4", `FECHA DE ELABORACIÓN : ${dateText}`);
   put("C5", `${supervisor.nombreCompleto} (${supervisor.codigoTrabajador})`);
   put("C6", user?.nombre ?? `Usuario #${retirement.usuarioBaja}`);
@@ -221,9 +223,23 @@ export async function createRetirementXlsx(idTag: string) {
   put("C13", "");
   put("C14", tool.idTag);
   put("C15", `Ubicación: ${tool.ubicacion ?? "No registrada"}`);
+  put("A16", "2.DESCRIPCIÓN DEL EVENTO Y EVIDENCIAS FOTOGRÁFICAS :");
   put("A17", retirement.motivo);
-  const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-  await fs.writeFile(xlsxPath, output);
+
+  const photoNames = (await fs.readdir(baseDir)).filter((name) => /\.(jpe?g|png)$/i.test(name)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).slice(0, 5);
+  if (photoNames.length) {
+    put("E16", "EVIDENCIAS");
+    for (let index = 0; index < photoNames.length; index++) {
+      const photoName = photoNames[index];
+      const photoPath = path.join(baseDir, photoName);
+      const extension = /\.png$/i.test(photoName) ? "png" : "jpeg";
+      const imageId = workbook.addImage({ filename: photoPath, extension });
+      const col = index % 2 === 0 ? 4 : 6;
+      const row = 16 + Math.floor(index / 2) * 8;
+      ws.addImage(imageId, { tl: { col, row }, ext: { width: 210, height: 132 } });
+    }
+  }
+  await workbook.xlsx.writeFile(xlsxPath);
   return { xlsxPath, xlsxNombre, tool: idTag };
 }
 
