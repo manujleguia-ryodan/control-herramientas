@@ -11,7 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { getSessionUser } from "../internalSession";
-import { createRetirementReport, importPersonalCsv, importToolsCsv, regenerateRetirementReport } from "../db";
+import { createMovementsXlsx, createRetirementReport, importPersonalCsv, importToolsCsv, regenerateRetirementReport } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -55,6 +55,14 @@ async function startServer() {
       return res.status(status).json({ ok: false, message });
     }
   }];
+  app.get("/api/movements/report.xlsx", async (req: express.Request, res: express.Response) => {
+    try {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, message: "Debes iniciar sesión." });
+      const result = await createMovementsXlsx({ search: String(req.query.search ?? ""), from: String(req.query.from ?? ""), to: String(req.query.to ?? "") });
+      return res.download(result.xlsxPath, result.xlsxNombre);
+    } catch (error) { const message = error instanceof Error ? error.message : "No se pudo generar el reporte XLSX."; return res.status(400).json({ ok: false, message }); }
+  });
   app.get("/api/retirements/report/:idTag", async (req: express.Request, res: express.Response) => {
     try {
       const user = await getSessionUser(req);
