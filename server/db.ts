@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { TRPCError } from "@trpc/server";
-import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
+import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, resolucionesObservaciones, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { hashPin } from "./pinAuth";
 import fs from "node:fs/promises";
@@ -345,7 +345,7 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
 }
 // Unix timestamps are timezone-independent; the UI formats them with America/Lima (UTC-5).
 function peruNow() { return Date.now(); }
-export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; condicionSalida?: string; observacionSalida?: string }) {
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; condicionSalida?: string; observacionSalida?: string; comentarioResolucion?: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
@@ -354,13 +354,16 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     const activeLoan = (await tx.select({ codigoTrabajador: transacciones.codigoTrabajador, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(and(eq(transacciones.idTag, input.idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
     if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `Error: Esta herramienta no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
+    const activeObservation = tool.observacionActiva?.trim();
+    if (activeObservation && !input.comentarioResolucion?.trim()) throw new TRPCError({ code: "CONFLICT", message: `Esta herramienta tiene una observación activa: ${activeObservation}. Registra cómo se resolvió antes de entregarla.` });
     const condicionSalida = validateCondition(input.condicionSalida, input.observacionSalida);
     const observacionSalida = input.observacionSalida?.trim() || "Despacho de herramienta";
     const fecha = peruNow();
     const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada", condicionSalida, observacionSalida });
-    await tx.update(catalogoHerramientas).set({ estadoActual: "Prestada" }).where(eq(catalogoHerramientas.idTag, tool.idTag));
-    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, condicion: condicionSalida, observacion: observacionSalida });
-    return { success: true } as const;
+    await tx.update(catalogoHerramientas).set({ estadoActual: "Prestada", condicionActual: condicionSalida, observacionActiva: null, observacionFecha: null, observacionUsuario: null }).where(eq(catalogoHerramientas.idTag, tool.idTag));
+    if (activeObservation) await tx.insert(resolucionesObservaciones).values({ idTag: tool.idTag, observacionAnterior: activeObservation, condicionAnterior: tool.condicionActual, comentarioResolucion: input.comentarioResolucion!.trim(), fechaResolucion: fecha, usuarioResolucion: input.userEntrega, transaccionId: Number(inserted[0].insertId) });
+    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, condicion: condicionSalida, observacion: activeObservation ? `Resolución: ${input.comentarioResolucion!.trim()}${observacionSalida ? ` · ${observacionSalida}` : ""}` : observacionSalida });
+    return { success: true, resolvedObservation: Boolean(activeObservation) } as const;
   });
 }
 export async function returnTransaction(idTag: string, userRecibe: number, movementId?: number, condicionEntrada?: string, observacionEntrada?: string) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogoHerramientas } from "../drizzle/schema";
+import { catalogoHerramientas, resolucionesObservaciones } from "../drizzle/schema";
 import { CONDITION_COMPLETE, validateCondition } from "./db";
 
 describe("active inventory observations", () => {
@@ -9,6 +9,10 @@ describe("active inventory observations", () => {
     expect(catalogoHerramientas.observacionActiva).toBeDefined();
     expect(catalogoHerramientas.observacionFecha).toBeDefined();
     expect(catalogoHerramientas.observacionUsuario).toBeDefined();
+    expect(resolucionesObservaciones.observacionAnterior).toBeDefined();
+    expect(resolucionesObservaciones.comentarioResolucion).toBeDefined();
+    expect(resolucionesObservaciones.fechaResolucion).toBeDefined();
+    expect(resolucionesObservaciones.usuarioResolucion).toBeDefined();
   });
 
   it("requires an observation for an abnormal condition and allows a normal return without one", () => {

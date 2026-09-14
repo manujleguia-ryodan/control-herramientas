@@ -92,3 +92,14 @@ export const bajasHerramientas = mysqlTable("bajas_herramientas", {
   supervisorCodigo: varchar("Supervisor_Codigo", { length: 80 }),
   pdfNombre: varchar("PDF_Nombre", { length: 220 }),
 });
+
+export const resolucionesObservaciones = mysqlTable("resoluciones_observaciones", {
+  id: int("ID").autoincrement().primaryKey(),
+  idTag: varchar("ID_Tag", { length: 100 }).notNull(),
+  observacionAnterior: text("Observacion_Anterior").notNull(),
+  condicionAnterior: varchar("Condicion_Anterior", { length: 80 }),
+  comentarioResolucion: text("Comentario_Resolucion").notNull(),
+  fechaResolucion: bigint("Fecha_Resolucion", { mode: "number" }).notNull(),
+  usuarioResolucion: int("Usuario_Resolucion").notNull(),
+  transaccionId: int("Transaccion_ID"),
+});
