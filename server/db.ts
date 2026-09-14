@@ -116,23 +116,23 @@ export async function createMovementsXlsx(filters: { search?: string; from?: str
   workbook.created = new Date();
   const ws = workbook.addWorksheet("Reporte de movimientos", { views: [{ showGridLines: false, state: "frozen", ySplit: 6 }] });
   ws.columns = [
-    { header: "Fecha y hora", key: "fecha", width: 23 }, { header: "Movimiento", key: "tipo", width: 15 },
+    { header: "Fecha y hora", key: "fecha", width: 23 }, { header: "Movimiento", key: "tipo", width: 15 }, { header: "Condición", key: "condicion", width: 24 },
     { header: "ID_Tag", key: "idTag", width: 18 }, { header: "Herramienta", key: "herramienta", width: 32 },
     { header: "Código trabajador", key: "codigo", width: 21 }, { header: "Trabajador", key: "trabajador", width: 30 },
     { header: "Usuario de almacén", key: "usuario", width: 25 }, { header: "Observación", key: "observacion", width: 38 },
   ];
-  ws.mergeCells("A1:H2");
+  ws.mergeCells("A1:I2");
   const logoPath = path.join(process.cwd(), "server", "templates", "logo-marcobre.png");
   try { const logoId = workbook.addImage({ filename: logoPath, extension: "png" }); ws.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 220, height: 44 } }); } catch {}
-  ws.mergeCells("A3:H3"); ws.getCell("A3").value = "REPORTE DE MOVIMIENTOS";
+  ws.mergeCells("A3:I3"); ws.getCell("A3").value = "REPORTE DE MOVIMIENTOS";
   ws.getCell("A3").font = { name: "Arial", size: 18, bold: true, color: { argb: "FF1E293B" } };
   ws.getCell("A3").alignment = { horizontal: "center", vertical: "middle" }; ws.getRow(3).height = 28;
-  ws.mergeCells("A4:H4"); ws.getCell("A4").value = `Generado: ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })} · Filtros: ${filters.from || "inicio"} a ${filters.to || "hoy"}${query ? ` · ${filters.search}` : ""}`;
+  ws.mergeCells("A4:I4"); ws.getCell("A4").value = `Generado: ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })} · Filtros: ${filters.from || "inicio"} a ${filters.to || "hoy"}${query ? ` · ${filters.search}` : ""}`;
   ws.getCell("A4").font = { name: "Arial", size: 10, italic: true, color: { argb: "FF64748B" } }; ws.getCell("A4").alignment = { horizontal: "center" };
-  const headerRow = ws.getRow(6); headerRow.values = ["Fecha y hora", "Movimiento", "ID_Tag", "Herramienta", "Código trabajador", "Trabajador", "Usuario de almacén", "Observación"];
+  const headerRow = ws.getRow(6); headerRow.values = ["Fecha y hora", "Movimiento", "Condición", "ID_Tag", "Herramienta", "Código trabajador", "Trabajador", "Usuario de almacén", "Observación"];
   headerRow.height = 24; headerRow.eachCell((cell) => { cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E293B" } }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
-  rows.forEach((row) => { const person = people.find((item) => item.codigoTrabajador === row.codigoTrabajador); const tool = tools.find((item) => item.idTag === row.idTag); const user = userRows.find((item) => item.id === row.userId)?.nombre ?? `Usuario #${row.userId}`; const excelRow = ws.addRow([new Date(row.fechaMovimiento).toLocaleString("es-PE", { timeZone: "America/Lima" }), row.tipo, row.idTag, tool?.descripcion ?? "", row.codigoTrabajador ?? "", person?.nombreCompleto ?? "", user, row.observacion ?? ""]); excelRow.eachCell((cell) => { cell.font = { name: "Arial", size: 10, color: { argb: "FF334155" } }; cell.alignment = { vertical: "middle", wrapText: true }; cell.border = { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } }; }); const typeCell = excelRow.getCell(2); typeCell.font = { name: "Arial", size: 10, bold: true, color: { argb: row.tipo === "Salida" ? "FFEA580C" : "FF0F766E" } }; });
-  ws.autoFilter = { from: "A6", to: "H6" };
+  rows.forEach((row) => { const person = people.find((item) => item.codigoTrabajador === row.codigoTrabajador); const tool = tools.find((item) => item.idTag === row.idTag); const user = userRows.find((item) => item.id === row.userId)?.nombre ?? `Usuario #${row.userId}`; const excelRow = ws.addRow([new Date(row.fechaMovimiento).toLocaleString("es-PE", { timeZone: "America/Lima" }), row.tipo, row.condicion ?? "Completa y operativa", row.idTag, tool?.descripcion ?? "", row.codigoTrabajador ?? "", person?.nombreCompleto ?? "", user, row.observacion ?? ""]); excelRow.eachCell((cell) => { cell.font = { name: "Arial", size: 10, color: { argb: "FF334155" } }; cell.alignment = { vertical: "middle", wrapText: true }; cell.border = { bottom: { style: "thin", color: { argb: "FFE2E8F0" } } }; }); const typeCell = excelRow.getCell(2); typeCell.font = { name: "Arial", size: 10, bold: true, color: { argb: row.tipo === "Salida" ? "FFEA580C" : "FF0F766E" } }; });
+  ws.autoFilter = { from: "A6", to: "I6" };
   const baseDir = path.join(process.cwd(), "storage", "reportes"); await fs.mkdir(baseDir, { recursive: true }); const output = path.join(baseDir, `Reporte_Movimientos_${new Date().toISOString().slice(0,10).replace(/-/g,"")}.xlsx`); await workbook.xlsx.writeFile(output); return { xlsxPath: output, xlsxNombre: path.basename(output) };
 }
 
@@ -318,17 +318,26 @@ export async function deactivatePersonal(codigoTrabajador: string) {
   return { success: true } as const;
 }
 
+export const CONDITION_COMPLETE = "Completa y operativa";
+export const CONDITION_OPTIONS = [CONDITION_COMPLETE, "Incompleta", "Con pieza faltante", "Con pieza rota", "Dañada", "Requiere revisión", "Otro"] as const;
+export function validateCondition(condition: string | undefined, observation: string | undefined) {
+  const normalized = (condition || CONDITION_COMPLETE).trim();
+  if (!CONDITION_OPTIONS.includes(normalized as typeof CONDITION_OPTIONS[number])) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona una condición válida." });
+  if (normalized !== CONDITION_COMPLETE && !observation?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "La observación es obligatoria cuando la herramienta no está completa y operativa." });
+  return normalized;
+}
+
 export async function recordMovement(input: { toolId: number; workerId: number; storekeeperId: number; type: "dispatch" | "return" | "transfer"; note?: string; destination?: string; condition?: string }) {
   const snapshot = await getCatalogSnapshot();
   const tool = snapshot.tools.find((row) => row.id === input.toolId);
   const worker = snapshot.workers.find((row) => row.id === input.workerId);
   if (!tool || !worker) throw new Error("Tool or worker not found");
-  if (input.type === "return") return returnTransaction(tool.code, input.storekeeperId);
-  return dispatchTransaction({ idTag: tool.code, codigoTrabajador: worker.code, userEntrega: input.storekeeperId });
+  if (input.type === "return") return returnTransaction(tool.code, input.storekeeperId, undefined, input.condition, input.note);
+  return dispatchTransaction({ idTag: tool.code, codigoTrabajador: worker.code, userEntrega: input.storekeeperId, condicionSalida: input.condition, observacionSalida: input.note });
 }
 // Unix timestamps are timezone-independent; the UI formats them with America/Lima (UTC-5).
 function peruNow() { return Date.now(); }
-export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number }) {
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; condicionSalida?: string; observacionSalida?: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
@@ -337,13 +346,15 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     const activeLoan = (await tx.select({ codigoTrabajador: transacciones.codigoTrabajador, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(and(eq(transacciones.idTag, input.idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
     if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `Error: Esta herramienta no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
+    const condicionSalida = validateCondition(input.condicionSalida, input.observacionSalida);
+    const observacionSalida = input.observacionSalida?.trim() || "Despacho de herramienta";
     const fecha = peruNow();
-    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada" });
-    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho de herramienta" });
+    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada", condicionSalida, observacionSalida });
+    await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, condicion: condicionSalida, observacion: observacionSalida });
     return { success: true } as const;
   });
 }
-export async function returnTransaction(idTag: string, userRecibe: number, movementId?: number) {
+export async function returnTransaction(idTag: string, userRecibe: number, movementId?: number, condicionEntrada?: string, observacionEntrada?: string) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
     const conditions = movementId ? eq(transacciones.id, movementId) : and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno));
@@ -351,9 +362,11 @@ export async function returnTransaction(idTag: string, userRecibe: number, movem
     if (!open || open.fechaRetorno) throw new TRPCError({ code: "NOT_FOUND", message: "No existe un préstamo activo seleccionado." });
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, open.idTag)).limit(1))[0];
     if (!tool) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta ya no existe." });
+    const condicion = validateCondition(condicionEntrada, observacionEntrada);
+    const observacion = observacionEntrada?.trim() || "Recepción de devolución";
     const fechaEntrada = peruNow();
-    await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto" }).where(eq(transacciones.id, open.id));
-    await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, observacion: "Recepción de devolución" });
+    await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto", condicionEntrada: condicion, observacionEntrada: observacion }).where(eq(transacciones.id, open.id));
+    await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, condicion, observacion });
     return { success: true, movementId: open.id } as const;
   });
 }

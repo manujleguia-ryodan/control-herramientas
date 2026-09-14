@@ -36,6 +36,10 @@ export const transacciones = mysqlTable("transacciones", {
   nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
   marcobreTrabajador: varchar("Marcobre_Trabajador", { length: 160 }),
   estado: varchar("Estado", { length: 30 }).default("Prestada").notNull(),
+  condicionSalida: varchar("Condicion_Salida", { length: 80 }).default("Completa y operativa").notNull(),
+  observacionSalida: text("Observacion_Salida"),
+  condicionEntrada: varchar("Condicion_Entrada", { length: 80 }),
+  observacionEntrada: text("Observacion_Entrada"),
 });
 
 export const movimientos = mysqlTable("movimientos", {
@@ -49,6 +53,7 @@ export const movimientos = mysqlTable("movimientos", {
   descripcionHerramienta: text("Descripcion_Herramienta"),
   nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
   observacion: text("Observacion"),
+  condicion: varchar("Condicion", { length: 80 }),
 });
 
 /** Tipo de sesión interno. Se mantienen campos opcionales heredados para compatibilidad de compilación del shell. */
