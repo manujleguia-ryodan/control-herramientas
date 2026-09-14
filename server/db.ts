@@ -174,6 +174,8 @@ export async function deleteToolSafely(idTag: string) {
 }
 export async function deactivateTool(idTag: string, motivoBaja: string, fechaIncidente: number, trabajadorResponsable: string, usuarioBaja: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const activeLoan = await db.select({ id: transacciones.id }).from(transacciones).where(and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno))).limit(1);
+  if (activeLoan.length) throw new TRPCError({ code: "CONFLICT", message: "No se puede dar de baja una herramienta que está prestada. Primero debe ser devuelta." });
   await db.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, idTag));
   await db.insert(bajasHerramientas).values({ idTag, motivo: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja });
   return { success: true } as const;
