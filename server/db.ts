@@ -84,7 +84,7 @@ export async function getCatalogSnapshot() {
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
     db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)),
   ]);
-  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null, reportPdfName: bajas.find((item) => item.idTag === tool.idTag)?.pdfNombre ?? null }));
+  const tools = herramientas.map((tool, index) => ({ id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? (tool.estadoActual === "Disponible con observación" ? "available_observed" : "available") : "retired", estadoActual: tool.estadoActual, condicionActual: tool.condicionActual, observacionActiva: tool.observacionActiva, observacionFecha: tool.observacionFecha, observacionUsuario: tool.observacionUsuario, imageUrl: null, locationId: null, rotations: tx.filter((row) => row.idTag === tool.idTag).length, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: bajas.find((item) => item.idTag === tool.idTag)?.motivo ?? null, incidentDate: bajas.find((item) => item.idTag === tool.idTag)?.fechaIncidente ?? null, retirementWorker: bajas.find((item) => item.idTag === tool.idTag)?.trabajadorResponsable ?? null, reportPdfName: bajas.find((item) => item.idTag === tool.idTag)?.pdfNombre ?? null }));
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const movements = tx.map((row) => ({ id: row.id, toolId: tools.find((tool) => tool.code === row.idTag)?.id ?? 0, workerId: workers.find((worker) => worker.code === row.codigoTrabajador)?.id ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
@@ -350,6 +350,7 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     const observacionSalida = input.observacionSalida?.trim() || "Despacho de herramienta";
     const fecha = peruNow();
     const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada", condicionSalida, observacionSalida });
+    await tx.update(catalogoHerramientas).set({ estadoActual: "Prestada" }).where(eq(catalogoHerramientas.idTag, tool.idTag));
     await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, condicion: condicionSalida, observacion: observacionSalida });
     return { success: true } as const;
   });
@@ -367,7 +368,9 @@ export async function returnTransaction(idTag: string, userRecibe: number, movem
     const fechaEntrada = peruNow();
     await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto", condicionEntrada: condicion, observacionEntrada: observacion }).where(eq(transacciones.id, open.id));
     await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, condicion, observacion });
-    return { success: true, movementId: open.id } as const;
+    const hasIssue = condicion !== "Completa y operativa";
+    await tx.update(catalogoHerramientas).set({ estadoActual: hasIssue ? "Disponible con observación" : "Disponible", condicionActual: condicion, observacionActiva: hasIssue ? observacion : null, observacionFecha: hasIssue ? fechaEntrada : null, observacionUsuario: hasIssue ? userRecibe : null }).where(eq(catalogoHerramientas.idTag, open.idTag));
+    return { success: true, movementId: open.id, estadoActual: hasIssue ? "Disponible con observación" : "Disponible", observacionActiva: hasIssue ? observacion : null } as const;
   });
 }
 
