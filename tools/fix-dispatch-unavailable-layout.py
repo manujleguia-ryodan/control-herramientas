@@ -1,0 +1,17 @@
+from pathlib import Path
+p=Path('/home/ubuntu/control-herramientas/client/src/pages/Home.tsx')
+s=p.read_text()
+s=s.replace('const selectedTool = availableTools.find((tool) => tool.code === toolId); const selectedTools = availableTools.filter((tool) => selectedToolCodes.includes(tool.code)); const selectedPerson = people.find((person) => person.code === personCode);','const selectedTool = availableTools.find((tool) => tool.code === toolId); const selectedTools = availableTools.filter((tool) => selectedToolCodes.includes(tool.code)); const selectedPerson = people.find((person) => person.code === personCode); const unavailableToolCodes = selectedToolCodes.filter((code) => loanedCodes.has(code)); const unavailableToolHolder = (code: string) => { const loan = activeLoans.find((row) => tools.find((item) => item.id === row.toolId)?.code === code); return loan ? people.find((person) => person.id === loan.workerId)?.fullName ?? "un trabajador" : "un trabajador"; };',1)
+old='''{toolQuery && <div className="suggestions">{toolMatches.length ? toolMatches.map((tool) => { const alreadySelected = selectedToolCodes.includes(tool.code); const unavailable = loanedCodes.has(tool.code); return <button type="button" key={tool.code} disabled={unavailable || alreadySelected} onClick={() => { setSelectedToolCodes((current) => [...current, tool.code]); setToolQuery(""); }}><b>{tool.code} · {tool.name}</b><small>{unavailable ? "No disponible · Prestada" : alreadySelected ? "Ya seleccionada" : (tool.brand ?? "Sin marca")}</small></button>; }) : <span>No hay coincidencias</span>}</div>}'''
+new='''{toolQuery && <div className="suggestions">{toolMatches.length ? toolMatches.map((tool) => { const alreadySelected = selectedToolCodes.includes(tool.code); const unavailable = loanedCodes.has(tool.code); return <button type="button" key={tool.code} className={unavailable ? "suggestion-unavailable" : ""} disabled={alreadySelected} onClick={() => { if (unavailable) { notify(`NO DISPONIBLE: Esta herramienta se encuentra en custodia de ${unavailableToolHolder(tool.code)}`); return; } setSelectedToolCodes((current) => [...current, tool.code]); setToolQuery(""); }}><b>{tool.code} · {tool.name}</b><small>{unavailable ? `NO DISPONIBLE: En custodia de ${unavailableToolHolder(tool.code)}` : alreadySelected ? "Ya seleccionada" : (tool.brand ?? "Sin marca")}</small></button>; }) : <span>No hay coincidencias</span>}</div>}'''
+if old not in s: raise SystemExit('suggestions block missing')
+s=s.replace(old,new,1)
+needle='''<div className="selected-tool-list">{selectedTools.map((tool) =>'''
+replacement='''{unavailableToolCodes.map((code) => <div className="dispatch-unavailable dispatch-unavailable-inline" key={code}>⚠️ NO DISPONIBLE: Esta herramienta se encuentra en custodia de {unavailableToolHolder(code)}</div>)}<div className="selected-tool-list">{selectedTools.map((tool) =>'''
+if needle not in s: raise SystemExit('selected list marker missing')
+s=s.replace(needle,replacement,1)
+p.write_text(s)
+
+p=Path('/home/ubuntu/control-herramientas/client/src/index.css')
+s=p.read_text()+'''\n.bulk-dispatch-tools { position: relative; }\n.bulk-dispatch-tools .search-box { position: relative; }\n.bulk-dispatch-tools .suggestions { top: calc(100% + 5px); }\n.suggestions button.suggestion-unavailable { color: #b91c1c; background: #fff7f7; }\n.suggestions button.suggestion-unavailable:hover { background: #fff1f2; }\n.dispatch-unavailable-inline { margin: 10px 0 0; font-size: 15px; }\n'''
+p.write_text(s)

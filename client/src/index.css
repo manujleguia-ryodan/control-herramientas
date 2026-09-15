@@ -381,3 +381,10 @@ h1 { margin-top: 8px; color: var(--ink); font-family: "DM Sans", sans-serif; fon
 .selected-tool-list { display:grid; gap:7px; margin-top:10px; }
 .selected-tool-chip { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px; color:#126b65; background:#e5f6f3; border:1px solid #b9e4df; border-radius:8px; font-size:12px; }
 .selected-tool-chip button { display:grid; place-items:center; color:#126b65; background:transparent; }
+
+.bulk-dispatch-tools { position: relative; }
+.bulk-dispatch-tools .search-box { position: relative; }
+.bulk-dispatch-tools .suggestions { top: calc(100% + 5px); }
+.suggestions button.suggestion-unavailable { color: #b91c1c; background: #fff7f7; }
+.suggestions button.suggestion-unavailable:hover { background: #fff1f2; }
+.dispatch-unavailable-inline { margin: 10px 0 0; font-size: 15px; }
