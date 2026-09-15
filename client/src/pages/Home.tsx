@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Archive, ArrowDownToLine, ArrowUpFromLine, Check, Download, FileText, LogOut, Package, Plus, Search, ShieldAlert, Trash2, UserRound, Users, Wrench, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 type Tab = "dispatch" | "active" | "movements" | "inventory" | "retired" | "people" | "access";
 type Tool = { id: number; code: string; name: string; brand?: string | null; ubicacion?: string | null; status: string; estadoActual?: string | null; condicionActual?: string | null; observacionActiva?: string | null; observacionFecha?: number | null; observacionUsuario?: number | null; rotations: number; notes?: string | null; incidentDate?: number | null; retirementWorker?: string | null; retirementUserId?: number | null };
@@ -43,7 +44,7 @@ export default function Home() {
   const [incidentDate, setIncidentDate] = useState(""); const [retirementWorker, setRetirementWorker] = useState(""); const [retirementPhotos, setRetirementPhotos] = useState<File[]>([]); const [supervisorCode, setSupervisorCode] = useState("");
   const [dispatchCondition, setDispatchCondition] = useState("Completa y operativa"); const [dispatchObservation, setDispatchObservation] = useState(""); const [resolutionComment, setResolutionComment] = useState(""); const [returnModalLoan, setReturnModalLoan] = useState<{ loan: Movement; tool: Tool | null; person: Worker | null } | null>(null); const [returnIssueDetected, setReturnIssueDetected] = useState(false); const [returnCondition, setReturnCondition] = useState("Completa y operativa"); const [returnObservation, setReturnObservation] = useState("");
   const [modalTool, setModalTool] = useState<Tool | null>(null); const [retireReason, setRetireReason] = useState(""); const [reportPreviewOpen, setReportPreviewOpen] = useState(false);
-const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", ubicacion: "" }); const [newPerson, setNewPerson] = useState({ codigoTrabajador: "", nombreCompleto: "", marcobre: "", tipo: "Marcobre" }); const [message, setMessage] = useState("");
+const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", ubicacion: "" }); const [newPerson, setNewPerson] = useState({ codigoTrabajador: "", nombreCompleto: "", marcobre: "", tipo: "Marcobre" }); const [message, setMessage] = useState(""); const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [newUser, setNewUser] = useState({ nombre: "", pin: "" }); const [toolsFile, setToolsFile] = useState<File | null>(null); const [peopleFile, setPeopleFile] = useState<File | null>(null); const [reportPending, setReportPending] = useState(false);
   const [debouncedToolQuery, setDebouncedToolQuery] = useState("");
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedToolQuery(toolQuery.trim()), 300); return () => window.clearTimeout(timer); }, [toolQuery]);
@@ -65,7 +66,10 @@ const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", 
   const personMatches = useMemo(() => people.filter((person) => `${person.code} ${person.fullName} ${person.marcobre ?? ""}`.toLowerCase().includes(personQuery.toLowerCase())).slice(0, 8), [people, personQuery]);
   const selectedTool = availableTools.find((tool) => tool.code === toolId); const selectedPerson = people.find((person) => person.code === personCode); const selectedToolUnavailable = Boolean(selectedTool && loanedCodes.has(selectedTool.code)); const selectedToolObservations = useMemo(() => selectedTool && !selectedToolUnavailable && selectedTool.observacionActiva ? [{ observacion: selectedTool.observacionActiva }] : [], [selectedTool, selectedToolUnavailable]); const unavailableHolder = selectedTool ? people.find((person) => person.id === activeLoans.find((row) => tools.find((item) => item.id === row.toolId)?.code === selectedTool.code)?.workerId)?.fullName ?? "un trabajador" : "un trabajador";
   const getLoanDetail = (code: string) => { const loan = activeLoans.find((row) => tools.find((item) => item.id === row.toolId)?.code === code); return loan ? { worker: people.find((person) => person.id === loan.workerId)?.fullName, storekeeper: snapshot.storekeepers.find((user) => user.id === loan.storekeeperId)?.fullName } : null; };
-  const notify = (text: string) => { setMessage(text); window.setTimeout(() => setMessage(""), 3500); };
+  const notify = (text: string) => {
+    const isError = /error|no se pudo|incorrecto|obligatori|selecciona|describe|no existe|no disponible|no se puede|debe ser|fuera de servicio/i.test(text);
+    (isError ? toast.error : toast.success)(text, { duration: isError ? 5000 : 3500 });
+  };
 
   if (me.isLoading || status.isLoading) return <div className="pos-loading">Cargando control interno…</div>;
   if (!me.data) return <LoginScreen users={users.data ?? []} hasUsers={Boolean(status.data?.users)} selectedUser={selectedUser} setSelectedUser={setSelectedUser} pin={pin} setPin={setPin} loginError={loginError || loginMutation.error?.message || ""} setLoginError={setLoginError} pending={loginMutation.isPending} onLogin={async () => { setLoginError(""); try { await loginMutation.mutateAsync({ id: Number(selectedUser), pin }); } catch { setLoginError("ID o PIN incorrectos."); } }} firstName={firstName} setFirstName={setFirstName} firstPin={firstPin} setFirstPin={setFirstPin} firstPending={registerMutation.isPending} onRegister={async () => { try { await registerMutation.mutateAsync({ nombre: firstName, pin: firstPin }); } catch (error) { setLoginError(error instanceof Error ? error.message : "No se pudo registrar el usuario."); } }} />;
