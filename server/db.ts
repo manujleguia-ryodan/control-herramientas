@@ -343,6 +343,25 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     return { success: true } as const;
   });
 }
+export type BulkReturnItem = { movementId: number; idTag: string };
+
+export async function returnTransactionsBulk(items: BulkReturnItem[], userRecibe: number) {
+  if (!items.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona al menos una herramienta para devolver." });
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  return db.transaction(async (tx) => {
+    const fechaEntrada = peruNow();
+    const returned: number[] = [];
+    for (const item of items) {
+      const open = (await tx.select().from(transacciones).where(and(eq(transacciones.id, item.movementId), eq(transacciones.idTag, item.idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
+      if (!open) throw new TRPCError({ code: "CONFLICT", message: `El préstamo de ${item.idTag} ya no está activo o cambió mientras se procesaba.` });
+      await tx.update(transacciones).set({ userRecibe, fechaRetorno: fechaEntrada, estado: "Devuelto" }).where(eq(transacciones.id, open.id));
+      await tx.insert(movimientos).values({ tipo: "Entrada", idTag: open.idTag, codigoTrabajador: open.codigoTrabajador, userId: userRecibe, fechaMovimiento: fechaEntrada, transaccionId: open.id, descripcionHerramienta: open.descripcionHerramienta, nombreTrabajador: open.nombreTrabajador, observacion: "Recepción masiva: completa y operativa" });
+      returned.push(open.id);
+    }
+    return { success: true, count: returned.length, movementIds: returned } as const;
+  });
+}
+
 export async function returnTransaction(idTag: string, userRecibe: number, movementId?: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
