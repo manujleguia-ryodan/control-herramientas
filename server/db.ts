@@ -343,6 +343,26 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     return { success: true } as const;
   });
 }
+export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajador: string, userEntrega: number) {
+  if (!idTags.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona al menos una herramienta para prestar." });
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  return db.transaction(async (tx) => {
+    const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, codigoTrabajador)).limit(1))[0];
+    if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
+    const fecha = peruNow(); const transactionIds: number[] = [];
+    for (const idTag of Array.from(new Set(idTags))) {
+      const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, idTag)).limit(1))[0];
+      if (!tool || !tool.estadoActivo) throw new TRPCError({ code: "NOT_FOUND", message: `Herramienta no encontrada o fuera de servicio: ${idTag}` });
+      const activeLoan = (await tx.select({ codigoTrabajador: transacciones.codigoTrabajador, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
+      if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `La herramienta ${idTag} no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
+      const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada" });
+      const transactionId = Number(inserted[0].insertId); transactionIds.push(transactionId);
+      await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: userEntrega, fechaMovimiento: fecha, transaccionId: transactionId, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho masivo de herramienta" });
+    }
+    return { success: true, count: transactionIds.length, transactionIds } as const;
+  });
+}
+
 export type BulkReturnItem = { movementId: number; idTag: string };
 
 export async function returnTransactionsBulk(items: BulkReturnItem[], userRecibe: number) {

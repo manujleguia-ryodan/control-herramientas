@@ -375,3 +375,9 @@ h1 { margin-top: 8px; color: var(--ink); font-family: "DM Sans", sans-serif; fon
 .bulk-review-panel p { margin-top:6px; color:var(--ink-soft); font-size:12px; }
 .bulk-review-list { display:grid; gap:7px; margin-top:13px; }
 .bulk-review-list label { display:flex; align-items:center; gap:8px; padding:9px 10px; background:#fafafa; border:1px solid var(--line); border-radius:8px; font-size:12px; }
+
+.bulk-dispatch-tools { padding:15px; margin-top:14px; background:#fafafa; border:1px solid var(--line); border-radius:11px; }
+.bulk-tool-label { display:block; margin-bottom:8px; color:var(--ink); font-size:12px; font-weight:800; }
+.selected-tool-list { display:grid; gap:7px; margin-top:10px; }
+.selected-tool-chip { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 10px; color:#126b65; background:#e5f6f3; border:1px solid #b9e4df; border-radius:8px; font-size:12px; }
+.selected-tool-chip button { display:grid; place-items:center; color:#126b65; background:transparent; }

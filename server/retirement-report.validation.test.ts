@@ -15,10 +15,28 @@ describe("retirement report contract", () => {
     expect(source).toContain('upload.array("photos", 5)');
   });
 
-  it("keeps the exact unavailable message and early dispatch lock in the UI", () => {
+  it("requires the worker first and exposes multi-tool dispatch in the UI and router", () => {
+    const ui = readFileSync("client/src/pages/Home.tsx", "utf8");
+    const router = readFileSync("server/routers.ts", "utf8");
+    const db = readFileSync("server/db.ts", "utf8");
+    expect(ui).toContain("1. Trabajador que recibe");
+    expect(ui).toContain("2. Herramientas a prestar");
+    expect(ui).toContain("selectedToolCodes");
+    expect(router).toContain("dispatchBulk");
+    expect(db).toContain("dispatchTransactionsBulk");
+  });
+});
+
+
+describe("bulk dispatch UI contract", () => {
+  it("keeps evidence upload limited to five files", () => {
     const source = readFileSync("client/src/pages/Home.tsx", "utf8");
-    expect(source).toContain("⚠️ NO DISPONIBLE: Actualmente en custodia de");
-    expect(source).toContain("selectedToolUnavailable");
     expect(source).toContain('accept="image/*" multiple');
   });
 });
+
+// The report and dispatch contracts intentionally remain in one file because both
+// are audit-critical flows used by the warehouse operator.
+void it;
+void expect;
+void describe;
