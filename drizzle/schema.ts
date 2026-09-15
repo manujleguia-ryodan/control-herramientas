@@ -15,11 +15,6 @@ export const catalogoHerramientas = mysqlTable("catalogo_herramientas", {
   marca: varchar("Marca", { length: 120 }),
   ubicacion: varchar("Ubicacion", { length: 80 }),
   estadoActivo: int("Estado_Activo").default(1).notNull(),
-  estadoActual: varchar("Estado_Actual", { length: 50 }).default("Disponible").notNull(),
-  condicionActual: varchar("Condicion_Actual", { length: 80 }).default("Completa y operativa").notNull(),
-  observacionActiva: text("Observacion_Activa"),
-  observacionFecha: bigint("Observacion_Fecha", { mode: "number" }),
-  observacionUsuario: int("Observacion_Usuario"),
 });
 
 export const catalogoPersonal = mysqlTable("catalogo_personal", {
@@ -41,10 +36,6 @@ export const transacciones = mysqlTable("transacciones", {
   nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
   marcobreTrabajador: varchar("Marcobre_Trabajador", { length: 160 }),
   estado: varchar("Estado", { length: 30 }).default("Prestada").notNull(),
-  condicionSalida: varchar("Condicion_Salida", { length: 80 }).default("Completa y operativa").notNull(),
-  observacionSalida: text("Observacion_Salida"),
-  condicionEntrada: varchar("Condicion_Entrada", { length: 80 }),
-  observacionEntrada: text("Observacion_Entrada"),
 });
 
 export const movimientos = mysqlTable("movimientos", {
@@ -58,7 +49,6 @@ export const movimientos = mysqlTable("movimientos", {
   descripcionHerramienta: text("Descripcion_Herramienta"),
   nombreTrabajador: varchar("Nombre_Trabajador", { length: 160 }),
   observacion: text("Observacion"),
-  condicion: varchar("Condicion", { length: 80 }),
 });
 
 /** Tipo de sesión interno. Se mantienen campos opcionales heredados para compatibilidad de compilación del shell. */
@@ -91,15 +81,4 @@ export const bajasHerramientas = mysqlTable("bajas_herramientas", {
   usuarioBaja: int("Usuario_Baja").notNull(),
   supervisorCodigo: varchar("Supervisor_Codigo", { length: 80 }),
   pdfNombre: varchar("PDF_Nombre", { length: 220 }),
-});
-
-export const resolucionesObservaciones = mysqlTable("resoluciones_observaciones", {
-  id: int("ID").autoincrement().primaryKey(),
-  idTag: varchar("ID_Tag", { length: 100 }).notNull(),
-  observacionAnterior: text("Observacion_Anterior").notNull(),
-  condicionAnterior: varchar("Condicion_Anterior", { length: 80 }),
-  comentarioResolucion: text("Comentario_Resolucion").notNull(),
-  fechaResolucion: bigint("Fecha_Resolucion", { mode: "number" }).notNull(),
-  usuarioResolucion: int("Usuario_Resolucion").notNull(),
-  transaccionId: int("Transaccion_ID"),
 });
