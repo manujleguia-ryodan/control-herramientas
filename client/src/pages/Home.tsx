@@ -18,7 +18,7 @@ export default function Home() {
   const status = trpc.auth.status.useQuery(undefined, { enabled: !me.data, retry: false });
   const users = trpc.auth.loginOptions.useQuery(undefined, { enabled: !me.data, retry: false });
   const accessUsers = trpc.catalog.users.useQuery(undefined, { enabled: me.data?.role === "admin", retry: false });
-  const snapshotQuery = trpc.catalog.snapshot.useQuery(undefined, { enabled: Boolean(me.data), retry: false });
+  const snapshotQuery = trpc.catalog.snapshot.useQuery(undefined, { enabled: Boolean(me.data), retry: false, staleTime: 15000, refetchOnWindowFocus: false });
   const utils = trpc.useUtils();
   const logoutMutation = trpc.auth.logout.useMutation({ onSuccess: () => { utils.auth.me.setData(undefined, null); void utils.auth.me.invalidate(); } });
   const loginMutation = trpc.auth.login.useMutation({ onSuccess: () => { void me.refetch(); } });
@@ -50,8 +50,8 @@ export default function Home() {
 const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", ubicacion: "" }); const [newPerson, setNewPerson] = useState({ codigoTrabajador: "", nombreCompleto: "", marcobre: "", tipo: "Marcobre" }); const [message, setMessage] = useState("");
   const [newUser, setNewUser] = useState({ nombre: "", pin: "" }); const [toolsFile, setToolsFile] = useState<File | null>(null); const [peopleFile, setPeopleFile] = useState<File | null>(null); const [reportPending, setReportPending] = useState(false);
   const [debouncedToolQuery, setDebouncedToolQuery] = useState("");
-  useEffect(() => { const timer = window.setTimeout(() => setDebouncedToolQuery(toolQuery.trim()), 300); return () => window.clearTimeout(timer); }, [toolQuery]);
-  const toolSearchQuery = trpc.catalog.searchTools.useQuery({ query: debouncedToolQuery }, { enabled: Boolean(me.data) && Boolean(debouncedToolQuery), retry: false });
+  useEffect(() => { const timer = window.setTimeout(() => setDebouncedToolQuery(toolQuery.trim()), 150); return () => window.clearTimeout(timer); }, [toolQuery]);
+  const toolSearchQuery = trpc.catalog.searchTools.useQuery({ query: debouncedToolQuery }, { enabled: Boolean(me.data) && debouncedToolQuery.length >= 2, retry: false, staleTime: 30000, refetchOnWindowFocus: false, placeholderData: (previous) => previous });
 
   useEffect(() => { if (!me.data) return; let timer: number | undefined; const reset = () => { if (timer) window.clearTimeout(timer); timer = window.setTimeout(() => { void logoutMutation.mutateAsync(); }, 15 * 60 * 1000); }; const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"]; events.forEach((event) => window.addEventListener(event, reset)); reset(); return () => { if (timer) window.clearTimeout(timer); events.forEach((event) => window.removeEventListener(event, reset)); }; }, [me.data, logoutMutation]);
 
