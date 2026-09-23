@@ -1,0 +1,1 @@
+ALTER TABLE `transacciones` ADD `Firma_Trabajador` text;

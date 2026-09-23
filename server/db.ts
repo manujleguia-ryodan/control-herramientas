@@ -331,7 +331,7 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
 }
 // Unix timestamps are timezone-independent; the UI formats them with America/Lima (UTC-5).
 function peruNow() { return Date.now(); }
-export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number }) {
+export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; firmaTrabajador?: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
@@ -341,12 +341,12 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
     if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `Error: Esta herramienta no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
     const fecha = peruNow();
-    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada" });
+    const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega: input.userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada", firmaTrabajador: input.firmaTrabajador ?? null });
     await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: input.userEntrega, fechaMovimiento: fecha, transaccionId: Number(inserted[0].insertId), descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho de herramienta" });
     return { success: true } as const;
   });
 }
-export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajador: string, userEntrega: number) {
+export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajador: string, userEntrega: number, firmaTrabajador: string) {
   if (!idTags.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona al menos una herramienta para prestar." });
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
   return db.transaction(async (tx) => {
@@ -358,7 +358,7 @@ export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajado
       if (!tool || !tool.estadoActivo) throw new TRPCError({ code: "NOT_FOUND", message: `Herramienta no encontrada o fuera de servicio: ${idTag}` });
       const activeLoan = (await tx.select({ codigoTrabajador: transacciones.codigoTrabajador, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno))).limit(1))[0];
       if (activeLoan) throw new TRPCError({ code: "CONFLICT", message: `La herramienta ${idTag} no está disponible. Actualmente está prestada a ${activeLoan.nombreTrabajador || activeLoan.codigoTrabajador}` });
-      const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada" });
+      const inserted = await tx.insert(transacciones).values({ idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userEntrega, fechaSalida: fecha, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, marcobreTrabajador: worker.marcobre, estado: "Prestada", firmaTrabajador });
       const transactionId = Number(inserted[0].insertId); transactionIds.push(transactionId);
       await tx.insert(movimientos).values({ tipo: "Salida", idTag: tool.idTag, codigoTrabajador: worker.codigoTrabajador, userId: userEntrega, fechaMovimiento: fecha, transaccionId: transactionId, descripcionHerramienta: tool.descripcion, nombreTrabajador: worker.nombreCompleto, observacion: "Despacho masivo de herramienta" });
     }

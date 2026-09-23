@@ -45,6 +45,7 @@ export const transacciones = mysqlTable("transacciones", {
   observacionSalida: text("Observacion_Salida"),
   condicionEntrada: varchar("Condicion_Entrada", { length: 80 }),
   observacionEntrada: text("Observacion_Entrada"),
+  firmaTrabajador: text("Firma_Trabajador"),
 });
 
 export const movimientos = mysqlTable("movimientos", {
