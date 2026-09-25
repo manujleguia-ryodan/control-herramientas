@@ -76,22 +76,23 @@ export async function deactivateUser(id: number) {
 export async function getCatalogSnapshot() {
   const db = await getDb();
   if (!db) return { units: [], locations: [], storekeepers: [], workers: [], tools: [], movements: [], stats: emptyStats() };
-  const [herramientas, personal, tx, ledger, userRows, bajas] = await Promise.all([
+  const [herramientas, personal, tx, ledger, userRows, bajas, rotationRows] = await Promise.all([
     db.select().from(catalogoHerramientas).orderBy(catalogoHerramientas.descripcion),
     db.select().from(catalogoPersonal).orderBy(catalogoPersonal.nombreCompleto),
-    db.select().from(transacciones).orderBy(desc(transacciones.fechaSalida)).limit(500),
+    db.select().from(transacciones).where(isNull(transacciones.fechaRetorno)).orderBy(desc(transacciones.fechaSalida)).limit(1000),
     db.select().from(movimientos).orderBy(desc(movimientos.fechaMovimiento)).limit(1000),
     db.select({ id: usuarios.id, nombre: usuarios.nombre, rol: usuarios.rol, estado: usuarios.estado }).from(usuarios).orderBy(usuarios.nombre),
-    db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)),
+    db.select().from(bajasHerramientas).orderBy(desc(bajasHerramientas.fechaIncidente)).limit(1000),
+    db.select({ idTag: transacciones.idTag, rotations: sql<number>`count(*)` }).from(transacciones).groupBy(transacciones.idTag),
   ]);
-  const txByTag = new Map<string, number>(); for (const row of tx) txByTag.set(row.idTag, (txByTag.get(row.idTag) ?? 0) + 1);
+  const txByTag = new Map<string, number>(); for (const row of rotationRows) txByTag.set(row.idTag, Number(row.rotations ?? 0));
   const bajaByTag = new Map<string, typeof bajas[number]>(); for (const row of bajas) if (!bajaByTag.has(row.idTag)) bajaByTag.set(row.idTag, row);
   const tools = herramientas.map((tool, index) => { const baja = bajaByTag.get(tool.idTag); return { id: index + 1, code: tool.idTag, name: tool.descripcion, brand: tool.marca, ubicacion: tool.ubicacion, status: tool.estadoActivo ? "available" : "retired", imageUrl: null, locationId: null, rotations: txByTag.get(tool.idTag) ?? 0, holder: null, holderCode: null, loanStorekeeper: null, daysOut: 0, notes: baja?.motivo ?? null, incidentDate: baja?.fechaIncidente ?? null, retirementWorker: baja?.trabajadorResponsable ?? null, reportPdfName: baja?.pdfNombre ?? null }; });
   const workers = personal.map((row, index) => ({ id: index + 1, code: row.codigoTrabajador, fullName: row.nombreCompleto, marcobre: row.marcobre, area: row.tipo, unitId: null }));
   const toolIdByCode = new Map(tools.map((tool) => [tool.code, tool.id])); const workerIdByCode = new Map(workers.map((worker) => [worker.code, worker.id]));
   const movements = tx.map((row) => ({ id: row.id, toolId: toolIdByCode.get(row.idTag) ?? 0, workerId: workerIdByCode.get(row.codigoTrabajador) ?? 0, storekeeperId: row.userEntrega, type: "dispatch" as const, occurredAt: row.fechaSalida, returnedAt: row.fechaRetorno, receiverId: row.userRecibe, firmaTrabajador: row.firmaTrabajador, note: row.fechaRetorno ? `Retornada el ${new Date(row.fechaRetorno).toLocaleString("es-PE", { timeZone: "America/Lima" })}` : null }));
   const storekeepers = userRows.map((row) => ({ id: row.id, code: `USR-${row.id}`, fullName: row.nombre, employeeId: null, phone: null }));
-  return { units: [], locations: [], storekeepers, workers, tools, movements, movementLog: ledger, stats: { ...emptyStats(), totalTools: tools.length, totalMovements: movements.length } };
+  return { units: [], locations: [], storekeepers, workers, tools, movements, movementLog: ledger, stats: { ...emptyStats(), totalTools: tools.length, totalMovements: ledger.length } };
 }
 export function emptyStats() { return { borrowed: 0, overdue: 0, totalTools: 0, totalMovements: 0 }; }
 export async function getCounts() { const snapshot = await getCatalogSnapshot(); return snapshot.stats; }
