@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { TRPCError } from "@trpc/server";
-import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
+import { bajasHerramientas, catalogoHerramientas, catalogoPersonal, despachosPendientes, InsertUser, movimientos, transacciones, usuarios } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { hashPin } from "./pinAuth";
 import fs from "node:fs/promises";
@@ -325,7 +325,7 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
   const snapshot = await getCatalogSnapshot();
   const tool = snapshot.tools.find((row) => row.id === input.toolId);
   const worker = snapshot.workers.find((row) => row.id === input.workerId);
-  if (!tool || !worker) throw new Error("Tool or worker not found");
+  if (!tool || !worker) throw new TRPCError({ code: "NOT_FOUND", message: "La herramienta o el trabajador no existen." });
   if (input.type === "return") return returnTransaction(tool.code, input.storekeeperId);
   return dispatchTransaction({ idTag: tool.code, codigoTrabajador: worker.code, userEntrega: input.storekeeperId });
 }
@@ -364,6 +364,63 @@ export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajado
     }
     return { success: true, count: transactionIds.length, transactionIds } as const;
   });
+}
+
+export type PendingDispatchTool = { idTag: string; descripcion: string; marca: string | null; ubicacion: string | null };
+function pendingCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+async function pendingDetails(db: any, row: any) {
+  const worker = (await db.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, row.codigoTrabajador)).limit(1))[0];
+  const tags = JSON.parse(row.idTags) as string[];
+  const toolRows = await db.select().from(catalogoHerramientas);
+  const tools = tags.map((tag) => toolRows.find((tool: any) => tool.idTag === tag)).filter(Boolean).map((tool: any) => ({ idTag: tool.idTag, descripcion: tool.descripcion, marca: tool.marca, ubicacion: tool.ubicacion }));
+  return { codigo: row.codigo, estado: row.estado, codigoTrabajador: row.codigoTrabajador, trabajador: worker?.nombreCompleto ?? row.codigoTrabajador, herramientas: tools, userEntrega: row.userEntrega, firmaTrabajador: row.firmaTrabajador, creadoAt: row.creadoAt, firmadoAt: row.firmadoAt, expiresAt: row.creadoAt + 10 * 60 * 1000 };
+}
+export async function createPendingDispatch(input: { idTags: string[]; codigoTrabajador: string; userEntrega: number }) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  return db.transaction(async (tx) => {
+    const uniqueTags = Array.from(new Set(input.idTags));
+    const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
+    if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
+    const activeRows = await tx.select({ idTag: transacciones.idTag, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(isNull(transacciones.fechaRetorno));
+    const pendingRows = await tx.select().from(despachosPendientes).where(eq(despachosPendientes.estado, "PENDIENTE"));
+    const pendingTags = new Set(pendingRows.flatMap((row: any) => JSON.parse(row.idTags) as string[]));
+    for (const tag of uniqueTags) {
+      const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, tag)).limit(1))[0];
+      if (!tool || !tool.estadoActivo) throw new TRPCError({ code: "NOT_FOUND", message: `Herramienta no encontrada o fuera de servicio: ${tag}` });
+      const loan = activeRows.find((row) => row.idTag === tag);
+      if (loan) throw new TRPCError({ code: "CONFLICT", message: `La herramienta ${tag} no está disponible. Actualmente está prestada a ${loan.nombreTrabajador || "otro trabajador"}` });
+      if (pendingTags.has(tag)) throw new TRPCError({ code: "CONFLICT", message: `La herramienta ${tag} ya está pendiente de firma en otra tablet.` });
+    }
+    let code = pendingCode();
+    while ((await tx.select({ id: despachosPendientes.id }).from(despachosPendientes).where(eq(despachosPendientes.codigo, code)).limit(1)).length) code = pendingCode();
+    const now = Date.now();
+    await tx.insert(despachosPendientes).values({ codigo: code, codigoTrabajador: input.codigoTrabajador, idTags: JSON.stringify(uniqueTags), userEntrega: input.userEntrega, estado: "PENDIENTE", creadoAt: now });
+    const row = (await tx.select().from(despachosPendientes).where(eq(despachosPendientes.codigo, code)).limit(1))[0];
+    return pendingDetails(tx, row);
+  });
+}
+export async function getPendingDispatch(code: string) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const row = (await db.select().from(despachosPendientes).where(eq(despachosPendientes.codigo, code.trim())).limit(1))[0];
+  if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "No existe un despacho pendiente con ese código." });
+  if (row.estado === "PENDIENTE" && Date.now() > row.creadoAt + 10 * 60 * 1000) { await db.update(despachosPendientes).set({ estado: "CANCELADO" }).where(eq(despachosPendientes.id, row.id)); throw new TRPCError({ code: "CONFLICT", message: "El código de firma expiró. Solicita al almacenero generar otro." }); }
+  return pendingDetails(db, row);
+}
+export async function signPendingDispatch(code: string, firmaTrabajador: string) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const row = (await db.select().from(despachosPendientes).where(eq(despachosPendientes.codigo, code.trim())).limit(1))[0];
+  if (!row || row.estado !== "PENDIENTE") throw new TRPCError({ code: "CONFLICT", message: "Este despacho ya no está pendiente de firma." });
+  if (Date.now() > row.creadoAt + 10 * 60 * 1000) throw new TRPCError({ code: "CONFLICT", message: "El código de firma expiró." });
+  await db.update(despachosPendientes).set({ estado: "FIRMADO", firmaTrabajador, firmadoAt: Date.now() }).where(eq(despachosPendientes.id, row.id));
+  return getPendingDispatch(code);
+}
+export async function confirmPendingDispatch(code: string, confirmingUser: number) {
+  const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  const row = (await db.select().from(despachosPendientes).where(eq(despachosPendientes.codigo, code.trim())).limit(1))[0];
+  if (!row || row.estado !== "FIRMADO" || !row.firmaTrabajador) throw new TRPCError({ code: "CONFLICT", message: "El trabajador todavía no ha firmado el despacho." });
+  const result = await dispatchTransactionsBulk(JSON.parse(row.idTags) as string[], row.codigoTrabajador, confirmingUser, row.firmaTrabajador);
+  await db.update(despachosPendientes).set({ estado: "CONFIRMADO", confirmadoAt: Date.now() }).where(eq(despachosPendientes.id, row.id));
+  return result;
 }
 
 export type BulkReturnItem = { movementId: number; idTag: string };

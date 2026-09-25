@@ -1,4 +1,4 @@
-import { bigint, int, mysqlEnum, mysqlTable, text, varchar } from "drizzle-orm/mysql-core";
+import { bigint, int, mysqlEnum, mysqlTable, text, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
 
 /** Modelo interno sin correo: el acceso se realiza con ID de usuario y PIN de 4 dígitos. */
 export const usuarios = mysqlTable("usuarios", {
@@ -104,3 +104,16 @@ export const resolucionesObservaciones = mysqlTable("resoluciones_observaciones"
   usuarioResolucion: int("Usuario_Resolucion").notNull(),
   transaccionId: int("Transaccion_ID"),
 });
+
+export const despachosPendientes = mysqlTable("despachos_pendientes", {
+  id: int("ID").autoincrement().primaryKey(),
+  codigo: varchar("Codigo", { length: 12 }).notNull(),
+  codigoTrabajador: varchar("Codigo_Trabajador", { length: 80 }).notNull(),
+  idTags: text("ID_Tags").notNull(),
+  userEntrega: int("User_Entrega").notNull(),
+  estado: varchar("Estado", { length: 20 }).default("PENDIENTE").notNull(),
+  firmaTrabajador: text("Firma_Trabajador"),
+  creadoAt: bigint("Creado_At", { mode: "number" }).notNull(),
+  firmadoAt: bigint("Firmado_At", { mode: "number" }),
+  confirmadoAt: bigint("Confirmado_At", { mode: "number" }),
+}, (table) => ({ codigoIdx: uniqueIndex("despachos_pendientes_codigo_idx").on(table.codigo) }));
