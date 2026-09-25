@@ -45,8 +45,8 @@ describe("catalog input validation", () => {
 
   it("rejects a dispatch when the serialized tool is not in the catalog", async () => {
     await expect(caller().movements.create({
-      toolId: 1,
-      workerId: 1,
+      toolId: 999999999,
+      workerId: 999999999,
       storekeeperId: 1,
       type: "dispatch",
     })).rejects.toMatchObject({ code: "NOT_FOUND" });
