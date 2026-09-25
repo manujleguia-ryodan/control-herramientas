@@ -19,7 +19,7 @@ export default function Home() {
   const status = trpc.auth.status.useQuery(undefined, { enabled: !me.data, retry: false });
   const users = trpc.auth.loginOptions.useQuery(undefined, { enabled: !me.data, retry: false });
   const accessUsers = trpc.catalog.users.useQuery(undefined, { enabled: me.data?.role === "admin", retry: false });
-  const snapshotQuery = trpc.catalog.snapshot.useQuery(undefined, { enabled: Boolean(me.data), retry: false, staleTime: 15000, refetchOnWindowFocus: false });
+  const snapshotQuery = trpc.catalog.snapshot.useQuery(undefined, { enabled: Boolean(me.data), retry: false, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: me.data ? 1000 : false, refetchIntervalInBackground: true });
   const utils = trpc.useUtils();
   const logoutMutation = trpc.auth.logout.useMutation({ onSuccess: () => { utils.auth.me.setData(undefined, null); void utils.auth.me.invalidate(); } });
   const loginMutation = trpc.auth.login.useMutation({ onSuccess: () => { void me.refetch(); } });
@@ -57,7 +57,7 @@ const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", 
   const [debouncedToolQuery, setDebouncedToolQuery] = useState("");
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedToolQuery(toolQuery.trim()), 150); return () => window.clearTimeout(timer); }, [toolQuery]);
   const toolSearchQuery = trpc.catalog.searchTools.useQuery({ query: debouncedToolQuery }, { enabled: Boolean(me.data) && debouncedToolQuery.length >= 2, retry: false, staleTime: 30000, refetchOnWindowFocus: false });
-  const pendingDispatchQuery = trpc.movements.pendingLatest.useQuery(undefined, { enabled: Boolean(me.data) && (tabletMode || Boolean(pendingCode)), retry: false, refetchInterval: (tabletMode || Boolean(pendingCode)) ? 2000 : false });
+  const pendingDispatchQuery = trpc.movements.pendingLatest.useQuery(undefined, { enabled: Boolean(me.data) && (tabletMode || Boolean(pendingCode)), retry: false, refetchInterval: (tabletMode || Boolean(pendingCode)) ? 1000 : false, refetchIntervalInBackground: true });
 
   useEffect(() => {
     if (!pendingCode) return;

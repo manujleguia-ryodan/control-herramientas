@@ -29,4 +29,10 @@ describe("tablet signature auto-confirm contract", () => {
     expect(handler).toContain('setSelectedToolCodes([])');
     expect(handler).toContain('setPersonCode("")');
   });
+
+  it("polls the operational state every second on both devices", () => {
+    const ui = readFileSync("client/src/pages/Home.tsx", "utf8");
+    expect(ui).toContain("refetchInterval: me.data ? 1000 : false");
+    expect(ui).toContain("refetchInterval: (tabletMode || Boolean(pendingCode)) ? 1000 : false");
+  });
 });
