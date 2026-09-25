@@ -18,4 +18,15 @@ describe("tablet signature auto-confirm contract", () => {
     expect(ui).toContain("Firmar y registrar despacho");
     expect(ui).not.toContain("Firma enviada a la computadora");
   });
+
+  it("clears the dispatch selection after a successful tablet signature", () => {
+    const ui = readFileSync("client/src/pages/Home.tsx", "utf8");
+    const start = ui.indexOf("const signFromTablet");
+    const end = ui.indexOf("const confirmTabletDispatch", start);
+    const handler = ui.slice(start, end);
+    expect(handler).toContain('setToolQuery("")');
+    expect(handler).toContain('setPersonQuery("")');
+    expect(handler).toContain('setSelectedToolCodes([])');
+    expect(handler).toContain('setPersonCode("")');
+  });
 });

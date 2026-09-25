@@ -24,13 +24,13 @@ export default function Home() {
   const logoutMutation = trpc.auth.logout.useMutation({ onSuccess: () => { utils.auth.me.setData(undefined, null); void utils.auth.me.invalidate(); } });
   const loginMutation = trpc.auth.login.useMutation({ onSuccess: () => { void me.refetch(); } });
   const registerMutation = trpc.auth.registerFirst.useMutation({ onSuccess: () => { void me.refetch(); } });
-  const dispatchMutation = trpc.movements.dispatch.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
-  const bulkDispatchMutation = trpc.movements.dispatchBulk.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
+  const dispatchMutation = trpc.movements.dispatch.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); } });
+  const bulkDispatchMutation = trpc.movements.dispatchBulk.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); } });
   const pendingCreateMutation = trpc.movements.pendingCreate.useMutation();
-  const pendingSignMutation = trpc.movements.pendingSignLatest.useMutation({ onSuccess: () => { void utils.catalog.snapshot.invalidate(); void utils.movements.pendingLatest.invalidate(); } });
-  const pendingConfirmMutation = trpc.movements.pendingConfirmLatest.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
-  const returnMutation = trpc.movements.return.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
-  const bulkReturnMutation = trpc.movements.returnBulk.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
+  const pendingSignMutation = trpc.movements.pendingSignLatest.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); void utils.movements.pendingLatest.invalidate(); } });
+  const pendingConfirmMutation = trpc.movements.pendingConfirmLatest.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); } });
+  const returnMutation = trpc.movements.return.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); } });
+  const bulkReturnMutation = trpc.movements.returnBulk.useMutation({ onSuccess: () => { void snapshotQuery.refetch(); } });
   const retireMutation = trpc.catalog.deactivateTool.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
   const deleteToolMutation = trpc.catalog.deleteToolSafely.useMutation({ onSuccess: () => void utils.catalog.snapshot.invalidate() });
   const deleteUserMutation = trpc.catalog.deleteUserSafely.useMutation({ onSuccess: () => { void accessUsers.refetch(); void users.refetch(); } });
@@ -59,7 +59,12 @@ const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", 
   const toolSearchQuery = trpc.catalog.searchTools.useQuery({ query: debouncedToolQuery }, { enabled: Boolean(me.data) && debouncedToolQuery.length >= 2, retry: false, staleTime: 30000, refetchOnWindowFocus: false });
   const pendingDispatchQuery = trpc.movements.pendingLatest.useQuery(undefined, { enabled: Boolean(me.data) && (tabletMode || Boolean(pendingCode)), retry: false, refetchInterval: (tabletMode || Boolean(pendingCode)) ? 2000 : false });
 
-  useEffect(() => { if (pendingCode && pendingDispatchQuery.isError && pendingDispatchQuery.error?.message.includes("No hay un despacho pendiente")) { setPendingCode(""); void snapshotQuery.refetch(); } }, [pendingCode, pendingDispatchQuery.isError, pendingDispatchQuery.error, snapshotQuery]);
+  useEffect(() => {
+    if (!pendingCode) return;
+    const refresh = window.setInterval(() => void snapshotQuery.refetch(), 2000);
+    return () => window.clearInterval(refresh);
+  }, [pendingCode, snapshotQuery.refetch]);
+  useEffect(() => { if (pendingCode && pendingDispatchQuery.isError && pendingDispatchQuery.error?.message.includes("No hay un despacho pendiente")) { setPendingCode(""); setToolQuery(""); setPersonQuery(""); setToolId(""); setSelectedToolCodes([]); setPersonCode(""); void snapshotQuery.refetch(); } }, [pendingCode, pendingDispatchQuery.isError, pendingDispatchQuery.error, snapshotQuery.refetch]);
 
   useEffect(() => { if (!me.data) return; let timer: number | undefined; const reset = () => { if (timer) window.clearTimeout(timer); timer = window.setTimeout(() => { void logoutMutation.mutateAsync(); }, 15 * 60 * 1000); }; const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"]; events.forEach((event) => window.addEventListener(event, reset)); reset(); return () => { if (timer) window.clearTimeout(timer); events.forEach((event) => window.removeEventListener(event, reset)); }; }, [me.data, logoutMutation]);
 
@@ -91,7 +96,7 @@ const [newTool, setNewTool] = useState({ idTag: "", descripcion: "", marca: "", 
     if (!selectedPerson || !selectedToolCodes.length) return notify("Selecciona primero el trabajador y al menos una herramienta.");
     try { await pendingCreateMutation.mutateAsync({ idTags: selectedToolCodes, codigoTrabajador: selectedPerson.code, userEntrega: me.data!.id }); setPendingCode("active"); notify("Despacho enviado a la tablet. La lista aparecerá automáticamente."); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo enviar el despacho a la tablet."); }
   };
-  const signFromTablet = async () => { if (!pendingDispatchQuery.data || signaturePoints.length < 2) return notify("Dibuja la firma del trabajador antes de enviarla."); try { await pendingSignMutation.mutateAsync({ firmaTrabajador: JSON.stringify(signaturePoints) }); setTabletSignatureOpen(false); setSignaturePoints([]); notify("Firma validada. El despacho ya está registrado en Movimientos y Préstamos activos."); void pendingDispatchQuery.refetch(); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo enviar la firma."); } };
+  const signFromTablet = async () => { if (!pendingDispatchQuery.data || signaturePoints.length < 2) return notify("Dibuja la firma del trabajador antes de enviarla."); try { await pendingSignMutation.mutateAsync({ firmaTrabajador: JSON.stringify(signaturePoints) }); setTabletSignatureOpen(false); setSignaturePoints([]); setPendingCode(""); setToolQuery(""); setPersonQuery(""); setToolId(""); setSelectedToolCodes([]); setPersonCode(""); notify("Firma validada. El despacho ya está registrado en Movimientos y Préstamos activos."); void pendingDispatchQuery.refetch(); void snapshotQuery.refetch(); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo enviar la firma."); } };
   const confirmTabletDispatch = async () => { if (!pendingCode || pendingDispatchQuery.data?.estado !== "FIRMADO") return notify("Espera a que el trabajador firme en la tablet."); try { const result = await pendingConfirmMutation.mutateAsync(undefined); setPendingCode(""); setToolQuery(""); setPersonQuery(""); setSelectedToolCodes([]); setPersonCode(""); notify(`${result.count} herramienta(s) prestada(s) correctamente`); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo confirmar el despacho firmado."); } };
   const doDispatch = async () => { if (!selectedPerson || !selectedToolCodes.length) return notify("Selecciona primero el trabajador y al menos una herramienta."); if (signaturePoints.length < 2) return notify("Dibuja la firma del trabajador antes de confirmar el despacho."); const count = selectedToolCodes.length; try { await bulkDispatchMutation.mutateAsync({ idTags: selectedToolCodes, codigoTrabajador: selectedPerson.code, userEntrega: me.data!.id, firmaTrabajador: JSON.stringify(signaturePoints) }); setToolQuery(""); setPersonQuery(""); setToolId(""); setSelectedToolCodes([]); setPersonCode(""); setSignaturePoints([]); setDispatchSignatureOpen(false); notify(`${count} herramienta(s) prestada(s) correctamente`); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo registrar el despacho masivo."); } };
   const deleteTool = async (tool: Tool) => { if (!window.confirm(`¿Eliminar definitivamente ${tool.code} del catálogo? El historial de movimientos se conservará.`)) return; try { await deleteToolMutation.mutateAsync({ idTag: tool.code }); notify("Herramienta eliminada del catálogo; historial conservado"); } catch (error) { notify(error instanceof Error ? error.message : "No se pudo eliminar la herramienta."); } };
