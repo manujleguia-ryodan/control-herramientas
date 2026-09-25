@@ -413,8 +413,9 @@ export async function signLatestPendingDispatch(firmaTrabajador: string) {
   const rows = await db.select().from(despachosPendientes).where(eq(despachosPendientes.estado, "PENDIENTE")).orderBy(desc(despachosPendientes.creadoAt)).limit(1);
   const row = rows[0]; if (!row) throw new TRPCError({ code: "CONFLICT", message: "No hay un despacho pendiente de firma." });
   if (Date.now() > row.creadoAt + 10 * 60 * 1000) throw new TRPCError({ code: "CONFLICT", message: "El despacho pendiente expiró." });
-  await db.update(despachosPendientes).set({ estado: "FIRMADO", firmaTrabajador, firmadoAt: Date.now() }).where(eq(despachosPendientes.id, row.id));
-  return getLatestPendingDispatch();
+  const result = await dispatchTransactionsBulk(JSON.parse(row.idTags) as string[], row.codigoTrabajador, row.userEntrega, firmaTrabajador);
+  await db.update(despachosPendientes).set({ estado: "CONFIRMADO", firmaTrabajador, firmadoAt: Date.now(), confirmadoAt: Date.now() }).where(eq(despachosPendientes.id, row.id));
+  return { ...result, firmado: true } as const;
 }
 export async function confirmLatestPendingDispatch(confirmingUser: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
