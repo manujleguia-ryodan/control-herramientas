@@ -382,7 +382,7 @@ export async function createPendingDispatch(input: { idTags: string[]; codigoTra
     const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
     const activeRows = await tx.select({ idTag: transacciones.idTag, nombreTrabajador: transacciones.nombreTrabajador }).from(transacciones).where(isNull(transacciones.fechaRetorno));
-    const pendingRows = await tx.select().from(despachosPendientes).where(sql`Estado IN ('PENDIENTE','FIRMADO')`);
+    const pendingRows = await tx.select().from(despachosPendientes).where(eq(despachosPendientes.estado, "PENDIENTE"));
     if (pendingRows.length) throw new TRPCError({ code: "CONFLICT", message: "Ya existe un despacho pendiente de firma. Espera a que sea firmado o confirmado." });
     const pendingTags = new Set(pendingRows.flatMap((row: any) => JSON.parse(row.idTags) as string[]));
     for (const tag of uniqueTags) {
@@ -402,7 +402,7 @@ export async function createPendingDispatch(input: { idTags: string[]; codigoTra
 }
 export async function getLatestPendingDispatch() {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  const rows = await db.select().from(despachosPendientes).where(sql`Estado IN ('PENDIENTE','FIRMADO')`).orderBy(desc(despachosPendientes.creadoAt)).limit(1);
+  const rows = await db.select().from(despachosPendientes).where(eq(despachosPendientes.estado, "PENDIENTE")).orderBy(desc(despachosPendientes.creadoAt)).limit(1);
   const row = rows[0];
   if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "No hay un despacho pendiente de firma." });
   if (Date.now() > row.creadoAt + 10 * 60 * 1000) { await db.update(despachosPendientes).set({ estado: "CANCELADO" }).where(eq(despachosPendientes.id, row.id)); throw new TRPCError({ code: "CONFLICT", message: "El despacho pendiente expiró. Solicita generar uno nuevo." }); }
