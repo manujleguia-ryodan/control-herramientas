@@ -10,6 +10,7 @@ import path from "node:path";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
+import { normalizeBrand, normalizeCode, normalizeDescription, normalizeLocation, normalizeName, normalizeType } from "../shared/normalization";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -51,7 +52,7 @@ export async function getUserById(id: number) {
 export async function createUser(input: { nombre: string; pin: string; rol?: "Admin" | "Almacen" }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(usuarios).values({ nombre: input.nombre.trim(), pinHash: hashPin(input.pin), rol: input.rol ?? "Almacen", estado: 1 });
+  const result = await db.insert(usuarios).values({ nombre: normalizeName(input.nombre), pinHash: hashPin(input.pin), rol: input.rol ?? "Almacen", estado: 1 });
   return { success: true, id: Number(result[0].insertId) } as const;
 }
 export async function deleteUserSafely(id: number, actingUserId: number) {
@@ -158,11 +159,12 @@ export async function createTool(input: { code: string; name: string; brand?: st
 
 export async function createToolRecord(input: { idTag: string; descripcion: string; marca?: string; ubicacion?: string; estadoActivo?: number; motivoBaja?: string;  }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.insert(catalogoHerramientas).values({ idTag: input.idTag.trim(), descripcion: input.descripcion.trim(), marca: input.marca, ubicacion: input.ubicacion, estadoActivo: input.estadoActivo ?? 1 });
+  await db.insert(catalogoHerramientas).values({ idTag: normalizeCode(input.idTag), descripcion: normalizeDescription(input.descripcion), marca: normalizeBrand(input.marca), ubicacion: normalizeLocation(input.ubicacion), estadoActivo: input.estadoActivo ?? 1 });
   return { success: true } as const;
 }
 export async function deleteToolSafely(idTag: string) {
   const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  idTag = normalizeCode(idTag);
   const active = await db.select({ id: transacciones.id }).from(transacciones).where(and(eq(transacciones.idTag, idTag), isNull(transacciones.fechaRetorno))).limit(1);
   if (active.length) throw new TRPCError({ code: "CONFLICT", message: "No se puede eliminar: la herramienta tiene préstamos activos." });
   await db.delete(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, idTag));
@@ -170,6 +172,7 @@ export async function deleteToolSafely(idTag: string) {
 }
 export async function deactivateTool(idTag: string, motivoBaja: string, fechaIncidente: number, trabajadorResponsable: string, usuarioBaja: number) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  idTag = normalizeCode(idTag);
   await db.update(catalogoHerramientas).set({ estadoActivo: 0 }).where(eq(catalogoHerramientas.idTag, idTag));
   await db.insert(bajasHerramientas).values({ idTag, motivo: motivoBaja.trim(), fechaIncidente, trabajadorResponsable: trabajadorResponsable.trim(), usuarioBaja });
   return { success: true } as const;
@@ -313,11 +316,12 @@ export async function regenerateRetirementReport(idTag: string, format: "pdf" | 
 
 export async function createPersonal(input: { codigoTrabajador: string; nombreCompleto: string; marcobre?: string; tipo: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
-  await db.insert(catalogoPersonal).values({ codigoTrabajador: input.codigoTrabajador.trim(), nombreCompleto: input.nombreCompleto.trim(), marcobre: input.marcobre, tipo: input.tipo.trim() });
+  await db.insert(catalogoPersonal).values({ codigoTrabajador: normalizeCode(input.codigoTrabajador), nombreCompleto: normalizeName(input.nombreCompleto), marcobre: normalizeName(input.marcobre), tipo: normalizeType(input.tipo) });
   return { success: true } as const;
 }
 export async function deactivatePersonal(codigoTrabajador: string) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  codigoTrabajador = normalizeCode(codigoTrabajador);
   await db.delete(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, codigoTrabajador));
   return { success: true } as const;
 }
@@ -334,6 +338,7 @@ export async function recordMovement(input: { toolId: number; workerId: number; 
 function peruNow() { return Date.now(); }
 export async function dispatchTransaction(input: { idTag: string; codigoTrabajador: string; userEntrega: number; firmaTrabajador?: string }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  input = { ...input, idTag: normalizeCode(input.idTag), codigoTrabajador: normalizeCode(input.codigoTrabajador) };
   return db.transaction(async (tx) => {
     const tool = (await tx.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, input.idTag)).limit(1))[0];
     const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
@@ -350,6 +355,7 @@ export async function dispatchTransaction(input: { idTag: string; codigoTrabajad
 export async function dispatchTransactionsBulk(idTags: string[], codigoTrabajador: string, userEntrega: number, firmaTrabajador: string) {
   if (!idTags.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Selecciona al menos una herramienta para prestar." });
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  idTags = idTags.map(normalizeCode); codigoTrabajador = normalizeCode(codigoTrabajador);
   return db.transaction(async (tx) => {
     const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, codigoTrabajador)).limit(1))[0];
     if (!worker) throw new TRPCError({ code: "NOT_FOUND", message: "El trabajador no existe." });
@@ -378,6 +384,7 @@ async function pendingDetails(db: any, row: any) {
 }
 export async function createPendingDispatch(input: { idTags: string[]; codigoTrabajador: string; userEntrega: number }) {
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
+  input = { ...input, idTags: input.idTags.map(normalizeCode), codigoTrabajador: normalizeCode(input.codigoTrabajador) };
   return db.transaction(async (tx) => {
     const uniqueTags = Array.from(new Set(input.idTags));
     const worker = (await tx.select().from(catalogoPersonal).where(eq(catalogoPersonal.codigoTrabajador, input.codigoTrabajador)).limit(1))[0];
@@ -497,6 +504,8 @@ function parseCsv(text: string, expected: string[]) {
 export async function importCsvCatalog(input: { herramientasCsv: string; personalCsv: string }): Promise<CsvImportResult> {
   const herramientas = parseCsv(input.herramientasCsv, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion"]);
   const personal = parseCsv(input.personalCsv, ["Codigo_Trabajador", "Nombre_Completo", "Marcobre", "Tipo"]);
+  for (const row of herramientas) { row.ID_Tag = normalizeCode(row.ID_Tag); row.Descripcion = normalizeDescription(row.Descripcion); row.Marca = normalizeBrand(row.Marca) ?? ""; row.Ubicacion = normalizeLocation(row.Ubicacion) ?? ""; }
+  for (const row of personal) { row.Codigo_Trabajador = normalizeCode(row.Codigo_Trabajador); row.Nombre_Completo = normalizeName(row.Nombre_Completo); row.Marcobre = normalizeName(row.Marcobre) ?? ""; row.Tipo = normalizeType(row.Tipo); }
   const ids = new Set<string>(); for (const row of herramientas) { if (!row.ID_Tag || ids.has(row.ID_Tag)) throw new Error(`ID_Tag duplicado o vacío: ${row.ID_Tag}`); ids.add(row.ID_Tag); }
   const codes = new Set<string>(); for (const row of personal) { if (!row.Codigo_Trabajador || codes.has(row.Codigo_Trabajador)) throw new Error(`Codigo_Trabajador duplicado o vacío: ${row.Codigo_Trabajador}`); codes.add(row.Codigo_Trabajador); }
   const db = await getDb(); if (!db) throw new Error("Database unavailable");
@@ -513,7 +522,7 @@ export async function importCsvCatalog(input: { herramientasCsv: string; persona
 export async function importToolsCsv(text: string) {
   const herramientas = parseCsv(text, ["ID_Tag", "Descripcion", "Marca", "Estado_Activo", "Ubicacion"]);
   const ids = new Set<string>();
-  for (const row of herramientas) { row.ID_Tag = row.ID_Tag.trim(); if (!row.ID_Tag) continue; if (!row.Descripcion.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada herramienta debe incluir Descripcion." }); if (ids.has(row.ID_Tag)) throw new TRPCError({ code: "CONFLICT", message: `ID_Tag duplicado dentro del archivo: ${row.ID_Tag}` }); ids.add(row.ID_Tag); }
+  for (const row of herramientas) { row.ID_Tag = normalizeCode(row.ID_Tag); row.Descripcion = normalizeDescription(row.Descripcion); row.Marca = normalizeBrand(row.Marca) ?? ""; row.Ubicacion = normalizeLocation(row.Ubicacion) ?? ""; if (!row.ID_Tag) continue; if (!row.Descripcion) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada herramienta debe incluir Descripcion." }); if (ids.has(row.ID_Tag)) throw new TRPCError({ code: "CONFLICT", message: `ID_Tag duplicado dentro del archivo: ${row.ID_Tag}` }); ids.add(row.ID_Tag); }
   const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La base de datos no está disponible." });
   for (const row of herramientas) { if (!row.ID_Tag) continue; const existing = (await db.select().from(catalogoHerramientas).where(eq(catalogoHerramientas.idTag, row.ID_Tag)).limit(1))[0]; if (existing) await db.update(catalogoHerramientas).set({ descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined }).where(eq(catalogoHerramientas.idTag, row.ID_Tag)); else await db.insert(catalogoHerramientas).values({ idTag: row.ID_Tag, descripcion: row.Descripcion.trim(), marca: row.Marca.trim() || undefined, ubicacion: row.Ubicacion.trim() || undefined, estadoActivo: row.Estado_Activo.trim() === "0" ? 0 : 1 }); }
   return { herramientas: herramientas.filter((row) => row.ID_Tag).length } as const;
@@ -523,6 +532,7 @@ export async function importPersonalCsv(text: string) {
   const personal = parseCsv(text, ["Codigo_Trabajador", "Nombre_Completo", "Marcobre", "Tipo"]);
   const codes = new Set<string>();
   for (const row of personal) {
+    row.Codigo_Trabajador = normalizeCode(row.Codigo_Trabajador); row.Nombre_Completo = normalizeName(row.Nombre_Completo); row.Marcobre = normalizeName(row.Marcobre) ?? ""; row.Tipo = normalizeType(row.Tipo);
     if (!row.Codigo_Trabajador || !row.Nombre_Completo || !row.Tipo) throw new TRPCError({ code: "BAD_REQUEST", message: "Cada persona debe incluir Codigo_Trabajador, Nombre_Completo y Tipo." });
     if (codes.has(row.Codigo_Trabajador)) throw new TRPCError({ code: "CONFLICT", message: `Código duplicado dentro del archivo: ${row.Codigo_Trabajador}` });
     codes.add(row.Codigo_Trabajador);
