@@ -433,3 +433,9 @@ EOF
 @media (max-width: 560px) { .dispatch-mode-bar { width:100%; }.dispatch-mode-bar button { flex:1; padding:9px 6px; font-size:10px; }.pending-dispatch-card { align-items:stretch; flex-direction:column; }.pending-dispatch-card .button,.pending-dispatch-card button { width:100%; }.dispatch-actions > button { flex:1 1 100%; }.tablet-dispatch-card { padding:18px 15px; }.tablet-tool-list > div { grid-template-columns:100px 1fr; } }
 
 EOF.tablet-waiting { padding:32px 20px; color:var(--ink-muted); background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; font-size:13px; line-height:1.6; text-align:center; }
+
+/* Importación independiente: cada archivo se selecciona y procesa por separado. */
+.import-block { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; flex: 1 1 220px; }
+.import-block > span { min-height: 17px; color: #168a83; font-size: 10px; font-weight: 700; }
+.import-block > .pos-primary { width: 100%; min-height: 40px; padding: 8px 12px; font-size: 12px; }
+@media (max-width: 760px) { .import-block { flex-basis: 100%; } }
