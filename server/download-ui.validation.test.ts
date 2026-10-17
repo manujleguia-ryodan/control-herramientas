@@ -5,6 +5,9 @@ describe("descargas y alta de herramientas", () => {
   it("permite al administrador elegir la ubicación de cada reporte", () => {
     const ui = readFileSync("client/src/pages/Home.tsx", "utf8");
     expect(ui).toContain("showSaveFilePicker");
+    expect(ui).toContain("showDirectoryPicker");
+    expect(ui).toContain("Configuración de descargas");
+    expect(ui).toContain("saveDownloadDirectory");
     expect(ui).toContain("me.data?.role === \"admin\"");
     expect(ui).toContain("Reporte_Movimientos.xlsx");
     expect(ui).toContain("Reporte_FS_");
